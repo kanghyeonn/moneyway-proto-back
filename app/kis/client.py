@@ -304,9 +304,13 @@ class KisClient:
         env_path = self._settings.kis_token_cache_env_file
         if env_path:
             values = dotenv_values(env_path)
-            token = str(values.get("KIS_ACCESS_TOKEN") or token or "")
+            token = str(
+                values.get(self._settings.kis_access_token_cache_key) or token or ""
+            )
             expires_at_text = str(
-                values.get("KIS_ACCESS_TOKEN_EXPIRES_AT") or expires_at_text or ""
+                values.get(self._settings.kis_access_token_expires_at_cache_key)
+                or expires_at_text
+                or ""
             )
 
         expires_at = _parse_datetime(expires_at_text)
@@ -324,8 +328,12 @@ class KisClient:
             path.touch()
 
         expires_at_text = expires_at.isoformat()
-        set_key(str(path), "KIS_ACCESS_TOKEN", token)
-        set_key(str(path), "KIS_ACCESS_TOKEN_EXPIRES_AT", expires_at_text)
+        set_key(str(path), self._settings.kis_access_token_cache_key, token)
+        set_key(
+            str(path),
+            self._settings.kis_access_token_expires_at_cache_key,
+            expires_at_text,
+        )
 
 
 def _extract_records(payload: dict[str, Any]) -> list[dict[str, Any]]:

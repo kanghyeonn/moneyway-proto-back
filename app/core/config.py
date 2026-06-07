@@ -102,11 +102,19 @@ class Settings:
     )
     kis_app_key: str = _str_env("KIS_APP_KEY", "")
     kis_app_secret: str = _str_env("KIS_APP_SECRET", "")
+    kis_app_key_2: str = _str_env("KIS_APP_KEY_2", "")
+    kis_app_secret_2: str = _str_env("KIS_APP_SECRET_2", "")
     kis_customer_type: str = _str_env("KIS_CUSTOMER_TYPE", "P")
     kis_token_path: str = _str_env("KIS_TOKEN_PATH", "/oauth2/tokenP")
     kis_access_token: str = _str_env("KIS_ACCESS_TOKEN", "")
     kis_access_token_expires_at: str = _str_env("KIS_ACCESS_TOKEN_EXPIRES_AT", "")
+    kis_access_token_2: str = _str_env("KIS_ACCESS_TOKEN_2", "")
+    kis_access_token_expires_at_2: str = _str_env(
+        "KIS_ACCESS_TOKEN_EXPIRES_AT_2", ""
+    )
     kis_token_cache_env_file: str = _str_env("KIS_TOKEN_CACHE_ENV_FILE", ".env")
+    kis_access_token_cache_key: str = "KIS_ACCESS_TOKEN"
+    kis_access_token_expires_at_cache_key: str = "KIS_ACCESS_TOKEN_EXPIRES_AT"
 
     kis_volume_top_path: str = _str_env(
         "KIS_VOLUME_TOP_PATH", "/uapi/domestic-stock/v1/quotations/volume-rank"

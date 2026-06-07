@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import replace
 from datetime import datetime
 
 import asyncpg
@@ -35,8 +36,9 @@ class MarketSnapshotWorker:
             if use_advisory_lock:
                 await _acquire_worker_lock(pool)
             try:
+                kis_settings = _market_snapshot_kis_settings(self._settings)
                 service = MarketService(
-                    KisClient(self._settings),
+                    KisClient(kis_settings),
                     MarketRepository(pool),
                 )
                 return await service.run_intraday_snapshot(
@@ -71,4 +73,16 @@ async def _release_worker_lock(pool: asyncpg.Pool) -> None:
     await pool.fetchval(
         "SELECT pg_advisory_unlock($1)",
         MARKET_SNAPSHOT_WORKER_LOCK_ID,
+    )
+
+
+def _market_snapshot_kis_settings(settings: Settings) -> Settings:
+    return replace(
+        settings,
+        kis_app_key=settings.kis_app_key_2,
+        kis_app_secret=settings.kis_app_secret_2,
+        kis_access_token=settings.kis_access_token_2,
+        kis_access_token_expires_at=settings.kis_access_token_expires_at_2,
+        kis_access_token_cache_key="KIS_ACCESS_TOKEN_2",
+        kis_access_token_expires_at_cache_key="KIS_ACCESS_TOKEN_EXPIRES_AT_2",
     )

@@ -22,6 +22,17 @@ POST /api/market/intraday-snapshots/run
 
 이 API는 KIS `주식현재가 시세` REST API를 사용해 활성 종목의 현재가, 누적 거래량, 누적 거래대금, 전일 대비 등락률을 수집하고 `public.stock_intraday_snapshot`에 저장합니다.
 
+`scripts/run_market_snapshot.py`로 실행하는 장중 현재가 스냅샷 worker는 별도 KIS credential/token 세트를 사용합니다.
+
+```text
+KIS_APP_KEY_2
+KIS_APP_SECRET_2
+KIS_ACCESS_TOKEN_2
+KIS_ACCESS_TOKEN_EXPIRES_AT_2
+```
+
+토큰이 없거나 만료되면 `KIS_APP_KEY_2`, `KIS_APP_SECRET_2`로 새 토큰을 발급하고 `.env`의 `KIS_ACCESS_TOKEN_2`, `KIS_ACCESS_TOKEN_EXPIRES_AT_2`에 저장합니다. 다른 KIS API 호출은 기존 `KIS_APP_KEY`, `KIS_APP_SECRET`, `KIS_ACCESS_TOKEN` 세트를 계속 사용합니다.
+
 주도 섹터/테마 API는 최신 `stock_intraday_snapshot` 배치를 읽어서 계산합니다.
 
 ```text
@@ -34,7 +45,8 @@ POST /api/market/intraday-snapshots/run
 중요한 점:
 
 - 현재 주도 섹터/테마는 “최근 30분 변화”가 아니라 “해당 시점까지의 당일 누적값” 기준입니다.
-- 수집 주기는 화면 최신화 요구 수준에 맞춰 정합니다. 30분 단위로 돌리면 30분 단위 최신화, 1시간 단위로 돌리면 1시간 단위 최신화입니다.
+- 현재 운영 계획은 장중 1시간 단위로 현재가 스냅샷 worker를 실행하는 것입니다.
+- 30분 단위 실행도 가능하지만, 현재는 KIS 유량 제한과 전체 종목 수집 시간을 고려해 1시간 단위 최신화를 기본으로 둡니다.
 - FastAPI 서버를 실행하는 것만으로는 자동 수집이 실행되지 않습니다.
 - 과거 일봉 수집도 같은 이유로 FastAPI가 아니라 worker에서 실행합니다. 일봉 수집 결과는 `public.stock_daily_price`에 저장되고, 특정일 주도 섹터/테마 계산의 원천 데이터로 사용합니다.
 
@@ -46,21 +58,9 @@ POST /api/market/intraday-snapshots/run
 
 ### 1. crontab
 
-가장 단순한 방식입니다. 30분마다 worker script를 실행합니다.
+가장 단순한 방식입니다. 현재 운영 기준은 1시간마다 worker script를 실행하는 것입니다.
 
-예시:
-
-```bash
-*/30 * * * * cd /Users/kanghyeon/workspace/moneyway_back && .venv/bin/python scripts/run_market_snapshot.py >> logs/market_snapshot.log 2>&1
-```
-
-장 시간대만 실행하는 예시:
-
-```bash
-*/30 8-15 * * 1-5 cd /Users/kanghyeon/workspace/moneyway_back && .venv/bin/python scripts/run_market_snapshot.py >> logs/market_snapshot.log 2>&1
-```
-
-1시간마다 실행하는 예시:
+상시 1시간마다 실행하는 예시:
 
 ```bash
 0 * * * * cd /Users/kanghyeon/workspace/moneyway_back && .venv/bin/python scripts/run_market_snapshot.py --request-interval-seconds 1 >> logs/market_snapshot.log 2>&1
@@ -76,6 +76,12 @@ NXT 시작 이후 8시 30분부터 매시간 실행하는 예시:
 
 ```bash
 30 8-15 * * 1-5 cd /Users/kanghyeon/workspace/moneyway_back && .venv/bin/python scripts/run_market_snapshot.py --request-interval-seconds 1 >> logs/market_snapshot.log 2>&1
+```
+
+30분마다 실행하려면 아래처럼 바꿀 수 있지만 현재 기본 운영안은 아닙니다.
+
+```bash
+*/30 8-15 * * 1-5 cd /Users/kanghyeon/workspace/moneyway_back && .venv/bin/python scripts/run_market_snapshot.py --request-interval-seconds 1 >> logs/market_snapshot.log 2>&1
 ```
 
 장점:
@@ -141,7 +147,7 @@ scripts/run_stock_daily_prices.py
 
 권장 순서:
 
-1. `crontab`으로 원하는 주기(예: 30분 또는 1시간) worker script 실행을 자동화합니다.
+1. `crontab`으로 1시간 단위 worker script 실행을 자동화합니다.
 2. 수집 로그와 실패 종목 로그를 파일 또는 DB에 남깁니다.
 3. 거래일/공휴일/장 시간 체크 로직을 추가합니다.
 4. 필요하면 `market_snapshot_batch`의 상태를 모니터링하는 운영 API나 관리자 화면을 추가합니다.
@@ -244,8 +250,12 @@ time: 08:00-15:30 KST
 ## 현재 관련 설정
 
 ```text
-MARKET_SNAPSHOT_INTERVAL_MINUTES=30
+MARKET_SNAPSHOT_INTERVAL_MINUTES=60
 KIS_REQUEST_INTERVAL_SECONDS=1
+KIS_APP_KEY_2=...
+KIS_APP_SECRET_2=...
+KIS_ACCESS_TOKEN_2=...
+KIS_ACCESS_TOKEN_EXPIRES_AT_2=...
 DATABASE_URL=postgresql://...
 ```
 

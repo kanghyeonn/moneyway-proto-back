@@ -14,7 +14,7 @@
 - 종목 과거 일봉 데이터 수집
 - 당일 주도 섹터/테마 계산
 - FastAPI API 라우터 제공
-- 30분 단위 스냅샷 수집용 worker script 제공
+- 1시간 단위 스냅샷 수집용 worker script 제공
 
 ## 기술 스택
 
@@ -51,7 +51,7 @@ KIS_APP_SECRET=
 KIS_ACCESS_TOKEN=
 KIS_ACCESS_TOKEN_EXPIRES_AT=
 KIS_REQUEST_INTERVAL_SECONDS=1
-MARKET_SNAPSHOT_INTERVAL_MINUTES=30
+MARKET_SNAPSHOT_INTERVAL_MINUTES=60
 ```
 
 `KIS_ACCESS_TOKEN`은 발급 제한을 고려해 `.env`에 캐시합니다. 기존 토큰이 없거나 유효하지 않으면 재발급 후 `.env`에 저장합니다.
@@ -97,7 +97,8 @@ GET /health
 .venv/bin/python scripts/run_market_snapshot.py --request-interval-seconds 1
 ```
 
-30분 단위 최신화는 FastAPI 서버만 실행해서는 동작하지 않습니다. `scripts/run_market_snapshot.py`를 crontab 같은 스케줄러에 등록해야 합니다.
+1시간 단위 최신화는 FastAPI 서버만 실행해서는 동작하지 않습니다. `scripts/run_market_snapshot.py`를 crontab 같은 스케줄러에 등록해야 합니다.
+현재가 스냅샷 worker는 두 번째 KIS credential/token 세트인 `KIS_APP_KEY_2`, `KIS_APP_SECRET_2`, `KIS_ACCESS_TOKEN_2`, `KIS_ACCESS_TOKEN_EXPIRES_AT_2`를 사용합니다.
 
 ## 과거 일봉 수집
 

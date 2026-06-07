@@ -260,7 +260,7 @@ KIS_INQUIRE_PRICE_PATH=/uapi/domestic-stock/v1/quotations/inquire-price
 KIS_INQUIRE_PRICE_TR_ID=FHKST01010100
 KIS_INQUIRE_PRICE_MARKET_DIV_CODE=J
 KIS_REQUEST_INTERVAL_SECONDS=0.4
-MARKET_SNAPSHOT_INTERVAL_MINUTES=30
+MARKET_SNAPSHOT_INTERVAL_MINUTES=60
 ```
 
 `*_PARAMS`는 JSON object 문자열입니다. 값을 비워두면 코드의 공식 문서 기준 기본 파라미터가 적용되고, 지정한 key만 기본값 위에 merge됩니다.
@@ -383,7 +383,7 @@ query:
 ```text
 limit: 선택, 수집할 활성 종목 수 제한
 dry_run: 선택, true면 KIS 호출만 하고 DB에 저장하지 않음
-snapshot_batch_at: 선택, 생략하면 현재 시각을 30분 단위로 내림
+snapshot_batch_at: 선택, 생략하면 현재 시각을 설정된 스냅샷 간격 단위로 내림
 ```
 
 초기 검증은 아래처럼 작은 범위부터 실행합니다.
