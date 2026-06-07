@@ -11,6 +11,7 @@
 - 상승/하락 종목 수 집계
 - 조회 상위 종목 조회
 - 종목 현재가 스냅샷 수집
+- 종목 과거 일봉 데이터 수집
 - 당일 주도 섹터/테마 계산
 - FastAPI API 라우터 제공
 - 30분 단위 스냅샷 수집용 worker script 제공
@@ -97,6 +98,27 @@ GET /health
 ```
 
 30분 단위 최신화는 FastAPI 서버만 실행해서는 동작하지 않습니다. `scripts/run_market_snapshot.py`를 crontab 같은 스케줄러에 등록해야 합니다.
+
+## 과거 일봉 수집
+
+특정일 주도 섹터/테마 계산에 사용할 종목별 일봉 데이터는 별도 worker로 수집합니다.
+일봉 수집 worker는 NXT 마스터 파일에 포함된 종목은 `UN`, 그 외 종목은 `J` 시장 구분으로 조회합니다.
+
+```bash
+.venv/bin/python scripts/run_stock_daily_prices.py --start-date 2026-06-01 --end-date 2026-06-05
+```
+
+일부 종목만 테스트:
+
+```bash
+.venv/bin/python scripts/run_stock_daily_prices.py --start-date 2026-06-01 --end-date 2026-06-05 --limit 5 --dry-run
+```
+
+요청 간격을 지정해서 실행:
+
+```bash
+.venv/bin/python scripts/run_stock_daily_prices.py --start-date 2026-06-01 --end-date 2026-06-05 --request-interval-seconds 1
+```
 
 ## 테스트
 

@@ -57,20 +57,24 @@ async def leadership_status(
 @router.get("/sectors/summary", response_model=LeadershipSummaryResponse)
 async def sector_leadership_summary(
     snapshot_batch_at: datetime | None = Query(default=None),
+    snapshot_date: date | None = Query(default=None, alias="date"),
     service: MarketLeadershipService = Depends(get_market_leadership_service),
 ) -> LeadershipSummaryResponse:
     return await service.sector_leadership_summary(
         snapshot_batch_at=snapshot_batch_at,
+        snapshot_date=snapshot_date,
     )
 
 
 @router.get("/themes/summary", response_model=LeadershipSummaryResponse)
 async def theme_leadership_summary(
     snapshot_batch_at: datetime | None = Query(default=None),
+    snapshot_date: date | None = Query(default=None, alias="date"),
     service: MarketLeadershipService = Depends(get_market_leadership_service),
 ) -> LeadershipSummaryResponse:
     return await service.theme_leadership_summary(
         snapshot_batch_at=snapshot_batch_at,
+        snapshot_date=snapshot_date,
     )
 
 
@@ -80,12 +84,14 @@ async def sector_leadership(
     side: LeadershipSide = Query(default="bullish"),
     sort: LeadershipSort = Query(default="score_desc"),
     snapshot_batch_at: datetime | None = Query(default=None),
+    snapshot_date: date | None = Query(default=None, alias="date"),
     include_top_stocks: int = Query(default=0, ge=0, le=10),
     settings: Settings = Depends(get_settings),
     service: MarketLeadershipService = Depends(get_market_leadership_service),
 ) -> LeadershipResponse:
     return await service.sector_leadership(
         snapshot_batch_at=snapshot_batch_at,
+        snapshot_date=snapshot_date,
         side=side,
         top_n=_top_n(top_n, settings),
         sort=sort,
@@ -99,12 +105,14 @@ async def theme_leadership(
     side: LeadershipSide = Query(default="bullish"),
     sort: LeadershipSort = Query(default="score_desc"),
     snapshot_batch_at: datetime | None = Query(default=None),
+    snapshot_date: date | None = Query(default=None, alias="date"),
     include_top_stocks: int = Query(default=0, ge=0, le=10),
     settings: Settings = Depends(get_settings),
     service: MarketLeadershipService = Depends(get_market_leadership_service),
 ) -> LeadershipResponse:
     return await service.theme_leadership(
         snapshot_batch_at=snapshot_batch_at,
+        snapshot_date=snapshot_date,
         side=side,
         top_n=_top_n(top_n, settings),
         sort=sort,
@@ -117,11 +125,13 @@ async def sector_leadership_stocks(
     sector_id: int,
     sort: CategoryStockSort = Query(default="change_rate_desc"),
     snapshot_batch_at: datetime | None = Query(default=None),
+    snapshot_date: date | None = Query(default=None, alias="date"),
     service: MarketLeadershipService = Depends(get_market_leadership_service),
 ) -> CategoryStocksResponse:
     return await service.sector_stocks(
         sector_id=sector_id,
         snapshot_batch_at=snapshot_batch_at,
+        snapshot_date=snapshot_date,
         sort=sort,
     )
 
@@ -131,10 +141,12 @@ async def theme_leadership_stocks(
     theme_id: int,
     sort: CategoryStockSort = Query(default="change_rate_desc"),
     snapshot_batch_at: datetime | None = Query(default=None),
+    snapshot_date: date | None = Query(default=None, alias="date"),
     service: MarketLeadershipService = Depends(get_market_leadership_service),
 ) -> CategoryStocksResponse:
     return await service.theme_stocks(
         theme_id=theme_id,
         snapshot_batch_at=snapshot_batch_at,
+        snapshot_date=snapshot_date,
         sort=sort,
     )

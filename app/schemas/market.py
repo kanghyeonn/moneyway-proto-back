@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, Literal
 
@@ -56,12 +56,39 @@ class StockIntradayQuote(BaseModel):
     raw: dict[str, Any] = Field(default_factory=dict)
 
 
+class StockDailyPrice(BaseModel):
+    short_code: str = Field(min_length=6, max_length=6)
+    trading_date: date
+    open_price: Decimal = Field(ge=0)
+    high_price: Decimal = Field(ge=0)
+    low_price: Decimal = Field(ge=0)
+    close_price: Decimal = Field(ge=0)
+    accumulated_volume: int = Field(ge=0)
+    accumulated_trade_amount: Decimal = Field(ge=0)
+    change_amount: Decimal | None = None
+    change_rate: Decimal | None = None
+    raw: dict[str, Any] = Field(default_factory=dict)
+
+
 class IntradaySnapshotRunResult(BaseModel):
     snapshot_batch_at: datetime
     interval_minutes: int
     target_stock_count: int
     success_stock_count: int
     failed_stock_count: int
+    skipped_unknown_stock: int
+    dry_run: bool
+    status: str
+    errors: list[str] = Field(default_factory=list)
+
+
+class DailyPriceCollectionResult(BaseModel):
+    start_date: date
+    end_date: date
+    target_stock_count: int
+    success_stock_count: int
+    failed_stock_count: int
+    saved_price_count: int
     skipped_unknown_stock: int
     dry_run: bool
     status: str

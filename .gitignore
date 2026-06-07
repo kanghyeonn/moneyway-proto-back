@@ -34,7 +34,7 @@ logs/*
 *.swo
 
 # Test/report artifacts
-docs/
+docs/kis/*API*.xlsx
 sql/
 test/
 tests/

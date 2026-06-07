@@ -37,6 +37,33 @@ class MarketLeadershipRepository:
             """
         )
 
+    async def has_daily_price_on_date(self, trading_date: date) -> bool:
+        return bool(
+            await self._pool.fetchval(
+                """
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM public.stock_daily_price
+                    WHERE trading_date = $1
+                    LIMIT 1
+                )
+                """,
+                trading_date,
+            )
+        )
+
+    async def latest_daily_price_date_before(
+        self, trading_date: date
+    ) -> date | None:
+        return await self._pool.fetchval(
+            """
+            SELECT MAX(trading_date)
+            FROM public.stock_daily_price
+            WHERE trading_date < $1
+            """,
+            trading_date,
+        )
+
     async def leadership_snapshots(
         self, *, limit: int, snapshot_date: date | None = None
     ) -> list[LeadershipSnapshotItem]:
@@ -78,6 +105,34 @@ class MarketLeadershipRepository:
     ) -> LeadershipSnapshotItem | None:
         items = await self.leadership_snapshots(limit=1, snapshot_date=snapshot_date)
         return items[0] if items else None
+
+    async def latest_leadership_snapshot_before(
+        self, *, snapshot_date: date
+    ) -> LeadershipSnapshotItem | None:
+        rows = await self._pool.fetch(
+            """
+            SELECT
+                snapshot.snapshot_batch_at,
+                COUNT(*)::int AS stock_count,
+                batch.status
+            FROM public.stock_intraday_snapshot AS snapshot
+            LEFT JOIN public.market_snapshot_batch AS batch
+                ON batch.snapshot_batch_at = snapshot.snapshot_batch_at
+            WHERE (snapshot.snapshot_batch_at AT TIME ZONE 'Asia/Seoul')::date < $1
+            GROUP BY snapshot.snapshot_batch_at, batch.status
+            ORDER BY snapshot.snapshot_batch_at DESC
+            LIMIT 1
+            """,
+            snapshot_date,
+        )
+        if not rows:
+            return None
+        row = rows[0]
+        return LeadershipSnapshotItem(
+            snapshot_batch_at=row["snapshot_batch_at"],
+            stock_count=row["stock_count"],
+            status=row["status"],
+        )
 
     async def sector_leadership(
         self,

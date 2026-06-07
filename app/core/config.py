@@ -136,6 +136,22 @@ class Settings:
     kis_inquire_price_market_div_code: str = _str_env(
         "KIS_INQUIRE_PRICE_MARKET_DIV_CODE", "UN"
     )
+    kis_daily_itemchart_price_path: str = _str_env(
+        "KIS_DAILY_ITEMCHART_PRICE_PATH",
+        "/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice",
+    )
+    kis_daily_itemchart_price_tr_id: str = _str_env(
+        "KIS_DAILY_ITEMCHART_PRICE_TR_ID", "FHKST03010100"
+    )
+    kis_daily_itemchart_price_market_div_code: str = _str_env(
+        "KIS_DAILY_ITEMCHART_PRICE_MARKET_DIV_CODE", "UN"
+    )
+    kis_daily_itemchart_price_period_div_code: str = _str_env(
+        "KIS_DAILY_ITEMCHART_PRICE_PERIOD_DIV_CODE", "D"
+    )
+    kis_daily_itemchart_price_org_adj_prc: str = _str_env(
+        "KIS_DAILY_ITEMCHART_PRICE_ORG_ADJ_PRC", "0"
+    )
     kis_index_price_path: str = _str_env(
         "KIS_INDEX_PRICE_PATH",
         "/uapi/domestic-stock/v1/quotations/inquire-index-price",

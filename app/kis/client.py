@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
@@ -9,7 +9,12 @@ import httpx
 from dotenv import dotenv_values, set_key
 
 from app.core.config import Settings
-from app.schemas.market import MarketIndexItem, StockIntradayQuote, StockRankItem
+from app.schemas.market import (
+    MarketIndexItem,
+    StockDailyPrice,
+    StockIntradayQuote,
+    StockRankItem,
+)
 
 
 class KisConfigurationError(RuntimeError):
@@ -125,6 +130,49 @@ class KisClient:
         if not isinstance(output, dict):
             raise RuntimeError("KIS inquire-price response did not include output")
         return _normalize_intraday_quote(normalized_code, output)
+
+    async def fetch_daily_prices(
+        self,
+        *,
+        short_code: str,
+        start_date: date,
+        end_date: date,
+        market_div_code: str | None = None,
+    ) -> list[StockDailyPrice]:
+        if not self._settings.kis_daily_itemchart_price_path:
+            raise KisConfigurationError("KIS daily itemchart price path must be configured")
+        if not self._settings.kis_daily_itemchart_price_tr_id:
+            raise KisConfigurationError("KIS daily itemchart price TR ID must be configured")
+        if start_date > end_date:
+            raise ValueError("start_date must be earlier than or equal to end_date")
+
+        normalized_code = short_code[1:] if short_code.startswith("A") else short_code
+        resolved_market_div_code = (
+            market_div_code or self._settings.kis_daily_itemchart_price_market_div_code
+        )
+        params = {
+            "FID_COND_MRKT_DIV_CODE": resolved_market_div_code,
+            "FID_INPUT_ISCD": normalized_code,
+            "FID_INPUT_DATE_1": start_date.strftime("%Y%m%d"),
+            "FID_INPUT_DATE_2": end_date.strftime("%Y%m%d"),
+            "FID_PERIOD_DIV_CODE": (
+                self._settings.kis_daily_itemchart_price_period_div_code
+            ),
+            "FID_ORG_ADJ_PRC": self._settings.kis_daily_itemchart_price_org_adj_prc,
+        }
+        payload = await self._get(
+            self._settings.kis_daily_itemchart_price_path,
+            tr_id=self._settings.kis_daily_itemchart_price_tr_id,
+            params=params,
+        )
+        records = payload.get("output2")
+        if not isinstance(records, list):
+            raise RuntimeError("KIS daily itemchart response did not include output2")
+        return [
+            _normalize_daily_price(normalized_code, record)
+            for record in records
+            if isinstance(record, dict)
+        ]
 
     async def fetch_market_indices(self) -> list[MarketIndexItem]:
         return [
@@ -421,6 +469,61 @@ def _normalize_intraday_quote(
         accumulated_volume=accumulated_volume,
         accumulated_trade_amount=accumulated_trade_amount,
         change_rate=_first_decimal(record, "prdy_ctrt", "change_rate"),
+        raw=record,
+    )
+
+
+def _normalize_daily_price(short_code: str, record: dict[str, Any]) -> StockDailyPrice:
+    trading_date_text = _first_text(record, "stck_bsop_date")
+    try:
+        trading_date = datetime.strptime(trading_date_text, "%Y%m%d").date()
+    except ValueError as exc:
+        raise RuntimeError(
+            f"KIS daily itemchart response missing valid trading date for {short_code}"
+        ) from exc
+
+    open_price = _first_decimal(record, "stck_oprc")
+    high_price = _first_decimal(record, "stck_hgpr")
+    low_price = _first_decimal(record, "stck_lwpr")
+    close_price = _first_decimal(record, "stck_clpr")
+    accumulated_volume = _first_int(record, "acml_vol")
+    accumulated_trade_amount = _first_decimal(record, "acml_tr_pbmn")
+    change_amount = _first_decimal(record, "prdy_vrss")
+    change_rate = _first_decimal(record, "prdy_ctrt")
+
+    if open_price is None:
+        raise RuntimeError(f"KIS daily itemchart response missing open price for {short_code}")
+    if high_price is None:
+        raise RuntimeError(f"KIS daily itemchart response missing high price for {short_code}")
+    if low_price is None:
+        raise RuntimeError(f"KIS daily itemchart response missing low price for {short_code}")
+    if close_price is None:
+        raise RuntimeError(f"KIS daily itemchart response missing close price for {short_code}")
+    if accumulated_volume is None:
+        raise RuntimeError(
+            f"KIS daily itemchart response missing accumulated volume for {short_code}"
+        )
+    if accumulated_trade_amount is None:
+        raise RuntimeError(
+            f"KIS daily itemchart response missing accumulated trade amount for {short_code}"
+        )
+
+    if change_rate is None and change_amount is not None:
+        previous_close = close_price - change_amount
+        if previous_close:
+            change_rate = (change_amount / previous_close) * Decimal("100")
+
+    return StockDailyPrice(
+        short_code=short_code,
+        trading_date=trading_date,
+        open_price=open_price,
+        high_price=high_price,
+        low_price=low_price,
+        close_price=close_price,
+        accumulated_volume=accumulated_volume,
+        accumulated_trade_amount=accumulated_trade_amount,
+        change_amount=change_amount,
+        change_rate=change_rate,
         raw=record,
     )
 

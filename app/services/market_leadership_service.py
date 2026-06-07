@@ -28,13 +28,18 @@ class MarketLeadershipService:
         self,
         *,
         snapshot_batch_at: datetime | None,
+        snapshot_date: date | None,
         side: LeadershipSide,
         top_n: int,
         sort: LeadershipSort,
         include_top_stocks: int = 0,
     ) -> LeadershipResponse:
-        batch_at, items = await self._repository.sector_leadership(
+        resolved_batch_at = await self._resolve_snapshot_batch_at(
             snapshot_batch_at=snapshot_batch_at,
+            snapshot_date=snapshot_date,
+        )
+        batch_at, items = await self._repository.sector_leadership(
+            snapshot_batch_at=resolved_batch_at,
             side=side,
             top_n=top_n,
             sort=sort,
@@ -54,13 +59,18 @@ class MarketLeadershipService:
         self,
         *,
         snapshot_batch_at: datetime | None,
+        snapshot_date: date | None,
         side: LeadershipSide,
         top_n: int,
         sort: LeadershipSort,
         include_top_stocks: int = 0,
     ) -> LeadershipResponse:
-        batch_at, items = await self._repository.theme_leadership(
+        resolved_batch_at = await self._resolve_snapshot_batch_at(
             snapshot_batch_at=snapshot_batch_at,
+            snapshot_date=snapshot_date,
+        )
+        batch_at, items = await self._repository.theme_leadership(
+            snapshot_batch_at=resolved_batch_at,
             side=side,
             top_n=top_n,
             sort=sort,
@@ -100,9 +110,15 @@ class MarketLeadershipService:
             snapshot_date=snapshot_date,
         )
         if item is None and snapshot_date is not None:
-            item = await self._repository.latest_leadership_snapshot(
-                snapshot_date=None,
-            )
+            if await self._should_fallback_to_previous_trading_date(snapshot_date):
+                item = await self._repository.latest_leadership_snapshot_before(
+                    snapshot_date=snapshot_date,
+                )
+            else:
+                raise RuntimeError(
+                    "No stock_intraday_snapshot batch is available for requested "
+                    f"trading date: {snapshot_date.isoformat()}"
+                )
         if item is None:
             return LeadershipSnapshotItem(
                 snapshot_batch_at=None,
@@ -152,10 +168,15 @@ class MarketLeadershipService:
         self,
         *,
         snapshot_batch_at: datetime | None,
+        snapshot_date: date | None,
     ) -> LeadershipSummaryResponse:
+        resolved_batch_at = await self._resolve_snapshot_batch_at(
+            snapshot_batch_at=snapshot_batch_at,
+            snapshot_date=snapshot_date,
+        )
         batch_at, bullish_count, bearish_count, top_bullish, top_bearish = (
             await self._repository.sector_leadership_summary(
-                snapshot_batch_at=snapshot_batch_at,
+                snapshot_batch_at=resolved_batch_at,
             )
         )
         return LeadershipSummaryResponse(
@@ -173,10 +194,15 @@ class MarketLeadershipService:
         self,
         *,
         snapshot_batch_at: datetime | None,
+        snapshot_date: date | None,
     ) -> LeadershipSummaryResponse:
+        resolved_batch_at = await self._resolve_snapshot_batch_at(
+            snapshot_batch_at=snapshot_batch_at,
+            snapshot_date=snapshot_date,
+        )
         batch_at, bullish_count, bearish_count, top_bullish, top_bearish = (
             await self._repository.theme_leadership_summary(
-                snapshot_batch_at=snapshot_batch_at,
+                snapshot_batch_at=resolved_batch_at,
             )
         )
         return LeadershipSummaryResponse(
@@ -195,11 +221,16 @@ class MarketLeadershipService:
         *,
         sector_id: int,
         snapshot_batch_at: datetime | None,
+        snapshot_date: date | None,
         sort: CategoryStockSort,
     ) -> CategoryStocksResponse:
+        resolved_batch_at = await self._resolve_snapshot_batch_at(
+            snapshot_batch_at=snapshot_batch_at,
+            snapshot_date=snapshot_date,
+        )
         batch_at, category_name, items = await self._repository.sector_stocks(
             sector_id=sector_id,
-            snapshot_batch_at=snapshot_batch_at,
+            snapshot_batch_at=resolved_batch_at,
             sort=sort,
         )
         return CategoryStocksResponse(
@@ -217,11 +248,16 @@ class MarketLeadershipService:
         *,
         theme_id: int,
         snapshot_batch_at: datetime | None,
+        snapshot_date: date | None,
         sort: CategoryStockSort,
     ) -> CategoryStocksResponse:
+        resolved_batch_at = await self._resolve_snapshot_batch_at(
+            snapshot_batch_at=snapshot_batch_at,
+            snapshot_date=snapshot_date,
+        )
         batch_at, category_name, items = await self._repository.theme_stocks(
             theme_id=theme_id,
-            snapshot_batch_at=snapshot_batch_at,
+            snapshot_batch_at=resolved_batch_at,
             sort=sort,
         )
         return CategoryStocksResponse(
@@ -233,3 +269,26 @@ class MarketLeadershipService:
             sort=sort,
             items=items,
         )
+
+    async def _resolve_snapshot_batch_at(
+        self,
+        *,
+        snapshot_batch_at: datetime | None,
+        snapshot_date: date | None,
+    ) -> datetime | None:
+        if snapshot_batch_at is not None or snapshot_date is None:
+            return snapshot_batch_at
+
+        item = await self.latest_leadership_snapshot(snapshot_date=snapshot_date)
+        if item.snapshot_batch_at is None:
+            raise RuntimeError("No stock_intraday_snapshot batches are available")
+        return item.snapshot_batch_at
+
+    async def _should_fallback_to_previous_trading_date(
+        self, snapshot_date: date
+    ) -> bool:
+        if snapshot_date.weekday() >= 5:
+            return True
+        if await self._repository.has_daily_price_on_date(snapshot_date):
+            return False
+        return await self._repository.latest_daily_price_date_before(snapshot_date) is not None

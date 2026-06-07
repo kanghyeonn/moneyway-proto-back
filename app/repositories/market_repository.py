@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 import asyncpg
 
-from app.schemas.market import StockIntradayQuote
+from app.schemas.market import StockDailyPrice, StockIntradayQuote
 
 
 class MarketRepository:
@@ -136,3 +136,81 @@ class MarketRepository:
                     inserted = len(records)
 
         return inserted, skipped, status
+
+    async def save_daily_prices(
+        self, *, daily_prices: list[StockDailyPrice]
+    ) -> tuple[int, int]:
+        if not daily_prices:
+            return 0, 0
+
+        short_codes = sorted({item.short_code for item in daily_prices})
+        inserted = 0
+        skipped = 0
+
+        async with self._pool.acquire() as conn:
+            async with conn.transaction():
+                stock_rows = await conn.fetch(
+                    """
+                    SELECT id, short_code
+                    FROM public.stock
+                    WHERE short_code = ANY($1::text[])
+                        AND is_active = true
+                    """,
+                    short_codes,
+                )
+                stock_ids_by_code = {
+                    row["short_code"]: row["id"] for row in stock_rows
+                }
+
+                records = []
+                for item in daily_prices:
+                    stock_id = stock_ids_by_code.get(item.short_code)
+                    if stock_id is None:
+                        skipped += 1
+                        continue
+                    records.append(
+                        (
+                            stock_id,
+                            item.trading_date,
+                            item.open_price,
+                            item.high_price,
+                            item.low_price,
+                            item.close_price,
+                            item.accumulated_volume,
+                            item.accumulated_trade_amount,
+                            item.change_amount,
+                            item.change_rate,
+                        )
+                    )
+
+                if records:
+                    await conn.executemany(
+                        """
+                        INSERT INTO public.stock_daily_price (
+                            stock_id,
+                            trading_date,
+                            open_price,
+                            high_price,
+                            low_price,
+                            close_price,
+                            accumulated_volume,
+                            accumulated_trade_amount,
+                            change_amount,
+                            change_rate
+                        )
+                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                        ON CONFLICT (stock_id, trading_date) DO UPDATE SET
+                            open_price = EXCLUDED.open_price,
+                            high_price = EXCLUDED.high_price,
+                            low_price = EXCLUDED.low_price,
+                            close_price = EXCLUDED.close_price,
+                            accumulated_volume = EXCLUDED.accumulated_volume,
+                            accumulated_trade_amount = EXCLUDED.accumulated_trade_amount,
+                            change_amount = EXCLUDED.change_amount,
+                            change_rate = EXCLUDED.change_rate
+                        """,
+                        records,
+                    )
+                    inserted = len(records)
+
+        return inserted, skipped

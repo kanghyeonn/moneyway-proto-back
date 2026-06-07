@@ -1,15 +1,17 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Callable
 
 from app.kis.client import KisClient
 from app.repositories.market_repository import MarketRepository
 from app.schemas.market import (
+    DailyPriceCollectionResult,
     IntradaySnapshotRunResult,
     MarketIndicesResponse,
     RankingResponse,
+    StockDailyPrice,
     StockIntradayQuote,
 )
 
@@ -116,6 +118,89 @@ class MarketService:
             target_stock_count=len(targets),
             success_stock_count=inserted,
             failed_stock_count=failed_count,
+            skipped_unknown_stock=skipped,
+            dry_run=False,
+            status=status,
+            errors=errors,
+        )
+
+    async def run_daily_price_collection(
+        self,
+        *,
+        start_date: date,
+        end_date: date,
+        limit: int | None,
+        dry_run: bool,
+        request_interval_seconds: float,
+        market_div_code_resolver: Callable[[str], str] | None = None,
+        progress_callback: Callable[[int, int, str, bool], None] | None = None,
+    ) -> DailyPriceCollectionResult:
+        if start_date > end_date:
+            raise ValueError("start_date must be earlier than or equal to end_date")
+
+        repository = self._require_repository()
+        targets = await repository.active_snapshot_targets(limit=limit)
+        daily_prices: list[StockDailyPrice] = []
+        errors: list[str] = []
+
+        total_count = len(targets)
+        success_stock_count = 0
+        for index, target in enumerate(targets):
+            short_code = str(target["short_code"])
+            success = False
+            try:
+                market_div_code = (
+                    market_div_code_resolver(short_code)
+                    if market_div_code_resolver is not None
+                    else None
+                )
+                items = await self._kis_client.fetch_daily_prices(
+                    short_code=short_code,
+                    start_date=start_date,
+                    end_date=end_date,
+                    market_div_code=market_div_code,
+                )
+                daily_prices.extend(items)
+                success_stock_count += 1
+                success = True
+            except Exception as exc:
+                errors.append(f"{short_code}: {exc}")
+
+            if progress_callback is not None:
+                progress_callback(index + 1, total_count, short_code, success)
+
+            if index < total_count - 1 and request_interval_seconds > 0:
+                await asyncio.sleep(request_interval_seconds)
+
+        failed_stock_count = total_count - success_stock_count
+        status = "completed"
+        if failed_stock_count > 0:
+            status = "partial" if success_stock_count else "failed"
+
+        if dry_run:
+            return DailyPriceCollectionResult(
+                start_date=start_date,
+                end_date=end_date,
+                target_stock_count=total_count,
+                success_stock_count=success_stock_count,
+                failed_stock_count=failed_stock_count,
+                saved_price_count=len(daily_prices),
+                skipped_unknown_stock=0,
+                dry_run=True,
+                status=status,
+                errors=errors,
+            )
+
+        saved_count, skipped = await repository.save_daily_prices(
+            daily_prices=daily_prices
+        )
+        return DailyPriceCollectionResult(
+            start_date=start_date,
+            end_date=end_date,
+            target_stock_count=total_count,
+            success_stock_count=success_stock_count,
+            failed_stock_count=failed_stock_count,
+            saved_price_count=saved_count,
             skipped_unknown_stock=skipped,
             dry_run=False,
             status=status,
