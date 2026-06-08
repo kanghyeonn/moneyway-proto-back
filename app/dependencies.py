@@ -12,7 +12,6 @@ from app.repositories.market_repository import MarketRepository
 from app.services.auth_service import AuthService
 from app.services.market_discovery_service import MarketDiscoveryService
 from app.services.market_leadership_service import MarketLeadershipService
-from app.services.market_service import MarketService
 
 
 def get_kis_client(request: Request, settings: Settings = Depends(get_settings)) -> KisClient:
@@ -37,17 +36,11 @@ def get_auth_repository(pool: asyncpg.Pool = Depends(get_pool)) -> AuthRepositor
     return AuthRepository(pool)
 
 
-def get_market_service(
-    kis_client: KisClient = Depends(get_kis_client),
-    repository: MarketRepository = Depends(get_market_repository),
-) -> MarketService:
-    return MarketService(kis_client, repository)
-
-
 def get_market_discovery_service(
     kis_client: KisClient = Depends(get_kis_client),
+    repository: MarketRepository = Depends(get_market_repository),
 ) -> MarketDiscoveryService:
-    return MarketDiscoveryService(kis_client)
+    return MarketDiscoveryService(kis_client, repository)
 
 
 def get_market_leadership_service(

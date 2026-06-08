@@ -18,12 +18,6 @@ class StockRankItem(BaseModel):
     raw: dict[str, Any] = Field(default_factory=dict)
 
 
-class RankingResponse(BaseModel):
-    as_of: datetime
-    top_n: int
-    items: list[StockRankItem]
-
-
 class MarketIndexItem(BaseModel):
     code: str
     name: str
@@ -40,11 +34,6 @@ class MarketIndexItem(BaseModel):
     unchanged_stock_count: int | None = None
     falling_stock_count: int | None = None
     raw: dict[str, Any] = Field(default_factory=dict)
-
-
-class MarketIndicesResponse(BaseModel):
-    as_of: datetime
-    items: list[MarketIndexItem]
 
 
 class StockIntradayQuote(BaseModel):

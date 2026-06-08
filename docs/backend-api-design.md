@@ -119,7 +119,7 @@ KIS_INDEX_PRICE_MARKET_DIV_CODE
 KIS_INDEX_CODES
 ```
 
-`GET /api/market/discovery/popular-searches`는 한국투자증권 `HTS조회상위20종목` REST API로 종목코드를 받은 뒤, 각 종목의 현재가 API를 호출해 종목명/등락률을 보강합니다.
+`GET /api/market/discovery/popular-searches`는 한국투자증권 `HTS조회상위20종목` REST API로 종목코드를 받은 뒤, DB `stock` 테이블에서 종목명을 매핑하고 각 종목의 현재가 API로 등락률을 보강합니다.
 
 KIS 조회상위 원천 API:
 
@@ -128,7 +128,7 @@ GET /uapi/domestic-stock/v1/ranking/hts-top-view
 TR_ID: HHMCM000100C0
 ```
 
-원천 API는 별도 query parameter가 없고 최대 20개 종목을 반환합니다. 응답에는 시장구분과 종목코드만 포함됩니다.
+원천 API는 별도 query parameter가 없고 최대 20개 종목을 반환합니다. 응답에는 시장구분과 종목코드만 포함됩니다. 종목명은 KIS 현재가 응답에 의존하지 않고 내부 DB `stock.short_code`, `stock.name` 매핑을 사용합니다.
 
 관련 설정:
 

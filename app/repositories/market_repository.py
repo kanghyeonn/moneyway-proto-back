@@ -28,6 +28,22 @@ class MarketRepository:
         rows = await self._pool.fetch(query, *args)
         return [{"stock_id": row["id"], "short_code": row["short_code"]} for row in rows]
 
+    async def stock_names_by_short_codes(
+        self, short_codes: list[str]
+    ) -> dict[str, str]:
+        if not short_codes:
+            return {}
+
+        rows = await self._pool.fetch(
+            """
+            SELECT short_code, name
+            FROM public.stock
+            WHERE short_code = ANY($1::text[])
+            """,
+            sorted(set(short_codes)),
+        )
+        return {row["short_code"]: row["name"] for row in rows}
+
     async def save_intraday_snapshot_batch(
         self,
         *,

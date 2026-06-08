@@ -6,7 +6,8 @@ from decimal import Decimal
 from zoneinfo import ZoneInfo
 
 from app.kis.client import KisClient
-from app.schemas.market import MarketIndexItem, StockIntradayQuote, StockRankItem
+from app.repositories.market_repository import MarketRepository
+from app.schemas.market import MarketIndexItem, StockRankItem
 from app.schemas.market_discovery import (
     DiscoveryAdvanceDeclineResponse,
     DiscoveryDirection,
@@ -27,8 +28,13 @@ KST = ZoneInfo("Asia/Seoul")
 
 
 class MarketDiscoveryService:
-    def __init__(self, kis_client: KisClient) -> None:
+    def __init__(
+        self,
+        kis_client: KisClient,
+        repository: MarketRepository | None = None,
+    ) -> None:
         self._kis_client = kis_client
+        self._repository = repository
 
     async def status(self) -> DiscoveryStatusResponse:
         now = datetime.now(timezone.utc).astimezone(KST)
@@ -80,11 +86,14 @@ class MarketDiscoveryService:
         self, *, limit: int
     ) -> DiscoveryPopularSearchesResponse:
         top_view_items = await self._kis_client.fetch_hts_top_view(top_n=limit)
+        stock_names = await self._stock_names_by_short_codes(
+            [item.short_code for item in top_view_items]
+        )
         items: list[DiscoveryPopularSearchItem] = []
 
         for rank, item in enumerate(top_view_items, start=1):
             quote = await self._kis_client.fetch_current_price(short_code=item.short_code)
-            name = _quote_name(quote) or item.name or item.short_code
+            name = stock_names.get(item.short_code) or item.short_code
             items.append(
                 DiscoveryPopularSearchItem(
                     rank=rank,
@@ -96,6 +105,13 @@ class MarketDiscoveryService:
             )
 
         return DiscoveryPopularSearchesResponse(items=items)
+
+    async def _stock_names_by_short_codes(
+        self, short_codes: list[str]
+    ) -> dict[str, str]:
+        if self._repository is None:
+            return {}
+        return await self._repository.stock_names_by_short_codes(short_codes)
 
     async def overview(
         self,
@@ -185,14 +201,6 @@ def _to_discovery_index_item(item: MarketIndexItem) -> DiscoveryIndexItem:
         change_rate=_float_or_none(item.change_rate),
         direction=_direction(item.change_rate or item.change),
     )
-
-
-def _quote_name(quote: StockIntradayQuote) -> str | None:
-    for key in ("hts_kor_isnm", "prdt_name", "prdt_abrv_name", "name"):
-        value = quote.raw.get(key)
-        if value not in (None, ""):
-            return str(value)
-    return None
 
 
 def _direction(value: Decimal | None) -> DiscoveryDirection:

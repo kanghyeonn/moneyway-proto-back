@@ -9,8 +9,6 @@ from app.repositories.market_repository import MarketRepository
 from app.schemas.market import (
     DailyPriceCollectionResult,
     IntradaySnapshotRunResult,
-    MarketIndicesResponse,
-    RankingResponse,
     StockDailyPrice,
     StockIntradayQuote,
 )
@@ -22,30 +20,6 @@ class MarketService:
     ) -> None:
         self._kis_client = kis_client
         self._repository = repository
-
-    async def volume_top(self, *, top_n: int) -> RankingResponse:
-        items = await self._kis_client.fetch_volume_top(top_n=top_n)
-        return RankingResponse(as_of=datetime.now(timezone.utc), top_n=top_n, items=items)
-
-    async def risers(self, *, top_n: int) -> RankingResponse:
-        items = await self._kis_client.fetch_risers(top_n=top_n)
-        return RankingResponse(as_of=datetime.now(timezone.utc), top_n=top_n, items=items)
-
-    async def fallers(self, *, top_n: int) -> RankingResponse:
-        items = await self._kis_client.fetch_fallers(top_n=top_n)
-        return RankingResponse(as_of=datetime.now(timezone.utc), top_n=top_n, items=items)
-
-    async def trade_amount_top(self, *, top_n: int) -> RankingResponse:
-        items = await self._kis_client.fetch_trade_amount_top(top_n=top_n)
-        return RankingResponse(as_of=datetime.now(timezone.utc), top_n=top_n, items=items)
-
-    async def hts_top_view(self, *, top_n: int) -> RankingResponse:
-        items = await self._kis_client.fetch_hts_top_view(top_n=top_n)
-        return RankingResponse(as_of=datetime.now(timezone.utc), top_n=top_n, items=items)
-
-    async def market_indices(self) -> MarketIndicesResponse:
-        items = await self._kis_client.fetch_market_indices()
-        return MarketIndicesResponse(as_of=datetime.now(timezone.utc), items=items)
 
     async def run_intraday_snapshot(
         self,
