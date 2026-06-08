@@ -436,7 +436,7 @@ FID_INPUT_PRICE_2
 FID_VOL_CNT
 ```
 
-프로토타입 거래량순위 기본값은 프론트 탐색용으로 `FID_DIV_CLS_CODE=0`(전체)과 `FID_TRGT_EXLS_CLS_CODE=0000000000`(제외 없음)을 사용합니다. ETF/ETN을 내부 DB의 `stock` 테이블에 섞지 않는 설계와는 별개로, KIS 거래량순위 응답 프록시는 ETF/ETN도 보여줄 수 있습니다.
+프로토타입 거래량순위 기본값은 프론트 탐색용으로 `FID_DIV_CLS_CODE=0`(전체)과 `FID_TRGT_EXLS_CLS_CODE=0000000000`(제외 없음)을 사용합니다. 내부 DB의 `stock` 테이블은 일반 주식뿐 아니라 ETF/ETN도 포함할 수 있으며, ETF는 6자리 코드, ETN은 7자리 코드까지 저장합니다.
 
 `/uapi/domestic-stock/v1/quotations/volume-rank`의 `FID_COND_MRKT_DIV_CODE`는 `J`(KRX) 또는 `NX`(NXT)를 사용합니다. `UN`(통합)은 일부 다른 KIS endpoint에서 보이는 값이지만 이 거래량순위 endpoint에서는 `ERROR INVALID FID_COND_MRKT_DIV_CODE`가 발생합니다.
 

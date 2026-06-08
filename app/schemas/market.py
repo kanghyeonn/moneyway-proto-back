@@ -37,7 +37,7 @@ class MarketIndexItem(BaseModel):
 
 
 class StockIntradayQuote(BaseModel):
-    short_code: str = Field(min_length=6, max_length=6)
+    short_code: str = Field(min_length=6, max_length=7)
     price: Decimal = Field(ge=0)
     accumulated_volume: int = Field(ge=0)
     accumulated_trade_amount: Decimal = Field(ge=0)
@@ -46,7 +46,7 @@ class StockIntradayQuote(BaseModel):
 
 
 class StockDailyPrice(BaseModel):
-    short_code: str = Field(min_length=6, max_length=6)
+    short_code: str = Field(min_length=6, max_length=7)
     trading_date: date
     open_price: Decimal = Field(ge=0)
     high_price: Decimal = Field(ge=0)

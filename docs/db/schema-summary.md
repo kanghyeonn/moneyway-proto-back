@@ -185,15 +185,15 @@ Google 로그인 성공 후에는 Google token을 서비스 API 인증에 직접
 
 ## `public.stock`
 
-주식 종목 기본 정보 테이블입니다.
+주식/ETF/ETN 종목 기본 정보 테이블입니다.
 
 | 컬럼 | 타입 | 제약/설명 |
 | --- | --- | --- |
 | `id` | `BIGINT` | PK, identity |
-| `short_code` | `VARCHAR(6)` | UNIQUE, `^[0-9A-Z]{6}$` |
+| `short_code` | `VARCHAR(7)` | UNIQUE, `^[0-9A-Z]{6,7}$` |
 | `name` | `VARCHAR(120)` | NOT NULL, 종목약명 |
 | `market` | `VARCHAR(32)` | NOT NULL, 시장구분 |
-| `stock_type` | `VARCHAR(32)` | NOT NULL, 주식종류 |
+| `stock_type` | `VARCHAR(32)` | NOT NULL, 주식종류 또는 상품유형 (`보통주`, `구형우선주`, `신형우선주`, `종류주권`, `ETF`, `ETN` 등) |
 | `listed_at` | `DATE` | 상장일 |
 | `is_active` | `BOOLEAN` | NOT NULL, default `true` |
 | `created_at` | `TIMESTAMPTZ` | NOT NULL, default `now()` |
@@ -475,6 +475,7 @@ set_user_oauth_accounts_updated_at
 | 원천 데이터 | 대상 테이블 |
 | --- | --- |
 | `data/data_0950_20260603.csv` | `public.stock` |
+| `data/kospi_code.mst` (`EF`, `EN`) | `public.stock` ETF/ETN |
 | `data/toss_sector.json` | `public.sector`, `public.stock_sector` |
 | `data/judal_common.json` | `public.theme`, `public.stock_theme` |
 | KIS `주식현재가 시세` REST | `public.stock_intraday_snapshot` |
@@ -488,7 +489,8 @@ set_user_oauth_accounts_updated_at
 - `theme`은 주달 기반 테마/이슈성 분류입니다.
 - `sector`와 `theme`은 앱에서 다르게 사용할 수 있도록 분리합니다.
 - JSON 종목코드는 `A005930` 형식이고, DB의 `stock.short_code`는 `005930` 형식입니다.
-- ETF/ETN은 현재 `public.stock`에 섞지 않습니다.
+- ETF 코드는 `0000D0`처럼 6자리, ETN 코드는 `Q500061`처럼 7자리까지 저장합니다.
+- ETF/ETN은 `public.stock.stock_type`을 각각 `ETF`, `ETN`으로 저장합니다.
 - 당일 주도 섹터/테마는 최신 `stock_intraday_snapshot`의 `accumulated_trade_amount`와 `change_rate`를 함께 사용합니다.
 - 최신 스냅샷 하나만 있으면 당일 주도 섹터/테마를 계산할 수 있습니다.
 - 특정일 주도 섹터/테마는 `stock_daily_price`의 `trading_date` 기준 일봉 데이터를 `stock_sector`, `stock_theme`과 조인해 계산할 수 있습니다.
