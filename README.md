@@ -98,6 +98,7 @@ GET /health
 ```
 
 1시간 단위 최신화는 FastAPI 서버만 실행해서는 동작하지 않습니다. `scripts/run_market_snapshot.py`를 crontab 같은 스케줄러에 등록해야 합니다.
+현재 운영 문서는 평일 08:00~20:00 사이 1시간 단위 실행을 기준으로 합니다.
 현재가 스냅샷 worker는 두 번째 KIS credential/token 세트인 `KIS_APP_KEY_2`, `KIS_APP_SECRET_2`, `KIS_ACCESS_TOKEN_2`, `KIS_ACCESS_TOKEN_EXPIRES_AT_2`를 사용합니다.
 
 ## 과거 일봉 수집

@@ -66,22 +66,22 @@ KIS_ACCESS_TOKEN_EXPIRES_AT_2
 0 * * * * cd /Users/kanghyeon/workspace/moneyway_back && .venv/bin/python scripts/run_market_snapshot.py --request-interval-seconds 1 >> logs/market_snapshot.log 2>&1
 ```
 
-평일 장 시간대에만 1시간마다 실행하는 예시:
+평일 08:00~20:00에 1시간마다 실행하는 예시:
 
 ```bash
-0 8-15 * * 1-5 cd /Users/kanghyeon/workspace/moneyway_back && .venv/bin/python scripts/run_market_snapshot.py --request-interval-seconds 1 >> logs/market_snapshot.log 2>&1
+0 8-20 * * 1-5 cd /Users/kanghyeon/workspace/moneyway_back && .venv/bin/python scripts/run_market_snapshot.py --request-interval-seconds 1 >> logs/market_snapshot.log 2>&1
 ```
 
-NXT 시작 이후 8시 30분부터 매시간 실행하는 예시:
+08:30~20:30처럼 30분 기준으로 실행하려면 아래처럼 바꿀 수 있습니다.
 
 ```bash
-30 8-15 * * 1-5 cd /Users/kanghyeon/workspace/moneyway_back && .venv/bin/python scripts/run_market_snapshot.py --request-interval-seconds 1 >> logs/market_snapshot.log 2>&1
+30 8-20 * * 1-5 cd /Users/kanghyeon/workspace/moneyway_back && .venv/bin/python scripts/run_market_snapshot.py --request-interval-seconds 1 >> logs/market_snapshot.log 2>&1
 ```
 
 30분마다 실행하려면 아래처럼 바꿀 수 있지만 현재 기본 운영안은 아닙니다.
 
 ```bash
-*/30 8-15 * * 1-5 cd /Users/kanghyeon/workspace/moneyway_back && .venv/bin/python scripts/run_market_snapshot.py --request-interval-seconds 1 >> logs/market_snapshot.log 2>&1
+*/30 8-20 * * 1-5 cd /Users/kanghyeon/workspace/moneyway_back && .venv/bin/python scripts/run_market_snapshot.py --request-interval-seconds 1 >> logs/market_snapshot.log 2>&1
 ```
 
 장점:
@@ -230,14 +230,14 @@ scripts/run_stock_daily_prices.py
 
 ```text
 weekday: 월-금
-time: 08:00-15:30 KST
+time: 08:00-20:00 KST
 ```
 
 추후 보강:
 
 - 한국거래소 휴장일 캘린더
 - NXT/정규장 구분
-- 장 마감 후 마지막 스냅샷 1회 수집 여부
+- 장 마감 후 마지막 스냅샷 수집 여부
 
 ### D. 스케줄 실행 중복 방지
 
