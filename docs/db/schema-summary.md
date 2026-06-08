@@ -20,6 +20,11 @@ public.stock_theme
 public.market_snapshot_batch
 public.stock_intraday_snapshot
 public.stock_daily_price
+public.users
+public.user_password_credentials
+public.user_oauth_accounts
+public.auth_refresh_tokens
+public.phone_verification_codes
 public.sector_daily_leadership_snapshot
 public.sector_daily_leadership_stock
 public.theme_daily_leadership_snapshot
@@ -32,6 +37,11 @@ public.theme_daily_leadership_stock
 public.stock
   1 ── N public.stock_intraday_snapshot
   1 ── N public.stock_daily_price
+
+public.users
+  1 ── 1 public.user_password_credentials
+  1 ── N public.user_oauth_accounts
+  1 ── N public.auth_refresh_tokens
 
 public.sector
   1 ── N public.sector_daily_leadership_snapshot
@@ -53,6 +63,125 @@ public.stock
   N ── N public.theme
         via public.stock_theme
 ```
+
+## Authentication Tables
+
+로그인/회원가입 최소 구성은 아래 SQL로 생성합니다.
+
+```text
+sql/20260608_auth_minimum_tables.sql
+```
+
+현재 화면 기준으로 지원해야 하는 인증 흐름:
+
+- 이메일 또는 휴대폰 번호 + 비밀번호 로그인
+- Google 회원가입/로그인
+- 자동 로그인용 refresh token
+- 휴대폰 번호 인증
+- Apple 회원가입/로그인은 추후 `user_oauth_accounts.provider='apple'`로 확장
+
+### `public.users`
+
+서비스 사용자 본체 테이블입니다.
+
+| 컬럼 | 타입 | 제약/설명 |
+| --- | --- | --- |
+| `id` | `BIGINT` | PK, identity |
+| `email` | `VARCHAR(255)` | NULL 가능, 소문자 기준 unique index |
+| `phone_number` | `VARCHAR(32)` | NULL 가능, unique index |
+| `name` | `VARCHAR(80)` | 사용자 이름 |
+| `profile_image_url` | `TEXT` | 소셜 프로필 이미지 등 |
+| `status` | `VARCHAR(32)` | `active`, `inactive`, `blocked`, `deleted` |
+| `marketing_agreed` | `BOOLEAN` | 마케팅 수신 동의 여부 |
+| `last_login_at` | `TIMESTAMPTZ` | 마지막 로그인 시각 |
+| `created_at` | `TIMESTAMPTZ` | 생성 시각 |
+| `updated_at` | `TIMESTAMPTZ` | 수정 시각 |
+
+제약:
+
+```text
+email IS NOT NULL OR phone_number IS NOT NULL
+```
+
+### `public.user_password_credentials`
+
+일반 비밀번호 로그인용 credential 테이블입니다. 비밀번호 원문은 저장하지 않고 hash만 저장합니다.
+
+| 컬럼 | 타입 | 제약/설명 |
+| --- | --- | --- |
+| `user_id` | `BIGINT` | PK, FK -> `public.users(id)` |
+| `password_hash` | `TEXT` | bcrypt/argon2 등으로 해시한 비밀번호 |
+| `password_updated_at` | `TIMESTAMPTZ` | 비밀번호 변경 시각 |
+| `failed_login_count` | `INTEGER` | 실패 횟수 |
+| `locked_until` | `TIMESTAMPTZ` | 임시 잠금 해제 시각 |
+| `created_at` | `TIMESTAMPTZ` | 생성 시각 |
+
+### `public.user_oauth_accounts`
+
+Google 로그인/회원가입 및 추후 Apple 로그인을 위한 외부 계정 연결 테이블입니다.
+
+| 컬럼 | 타입 | 제약/설명 |
+| --- | --- | --- |
+| `id` | `BIGINT` | PK, identity |
+| `user_id` | `BIGINT` | FK -> `public.users(id)` |
+| `provider` | `VARCHAR(32)` | `google`, `apple` |
+| `provider_user_id` | `VARCHAR(255)` | Google/Apple의 고유 사용자 식별자. Google은 ID token의 `sub` |
+| `email` | `VARCHAR(255)` | provider에서 받은 이메일 |
+| `email_verified` | `BOOLEAN` | provider 기준 이메일 검증 여부 |
+| `raw_profile` | `JSONB` | provider profile 원문 일부 |
+| `created_at` | `TIMESTAMPTZ` | 생성 시각 |
+| `updated_at` | `TIMESTAMPTZ` | 수정 시각 |
+
+기본 중복 방지:
+
+```text
+UNIQUE (provider, provider_user_id)
+```
+
+Google 로그인 성공 후에는 Google token을 서비스 API 인증에 직접 쓰지 않고, 백엔드가 Moneyway access token과 refresh token을 발급합니다. DB에는 refresh token의 hash만 저장합니다.
+
+### `public.auth_refresh_tokens`
+
+자동 로그인과 access token 재발급을 위한 refresh token 저장 테이블입니다. refresh token 원문은 저장하지 않고 hash만 저장합니다.
+
+| 컬럼 | 타입 | 제약/설명 |
+| --- | --- | --- |
+| `id` | `BIGINT` | PK, identity |
+| `user_id` | `BIGINT` | FK -> `public.users(id)` |
+| `token_hash` | `TEXT` | UNIQUE, refresh token hash |
+| `device_id` | `VARCHAR(255)` | 앱 디바이스 식별자 |
+| `user_agent` | `TEXT` | 클라이언트 user agent |
+| `ip_address` | `INET` | 발급 IP |
+| `expires_at` | `TIMESTAMPTZ` | 만료 시각 |
+| `revoked_at` | `TIMESTAMPTZ` | 폐기 시각 |
+| `created_at` | `TIMESTAMPTZ` | 생성 시각 |
+
+### `public.phone_verification_codes`
+
+회원가입 화면의 휴대폰 인증번호 발급/검증용 테이블입니다.
+
+| 컬럼 | 타입 | 제약/설명 |
+| --- | --- | --- |
+| `id` | `BIGINT` | PK, identity |
+| `phone_number` | `VARCHAR(32)` | 인증 대상 휴대폰 번호 |
+| `code_hash` | `TEXT` | 인증번호 hash |
+| `purpose` | `VARCHAR(32)` | `signup`, `password_reset` |
+| `expires_at` | `TIMESTAMPTZ` | 만료 시각 |
+| `verified_at` | `TIMESTAMPTZ` | 검증 완료 시각 |
+| `attempt_count` | `INTEGER` | 검증 시도 횟수 |
+| `created_at` | `TIMESTAMPTZ` | 생성 시각 |
+
+### 추가 권장 테이블
+
+초기 최소 구현에는 포함하지 않았지만, 기능을 확장할 때 추가하면 좋은 테이블입니다.
+
+| 테이블 | 용도 | 추가 시점 |
+| --- | --- | --- |
+| `public.password_reset_tokens` | 비밀번호 찾기/재설정 링크 또는 코드 관리 | 비밀번호 찾기 기능 구현 시 |
+| `public.terms` | 이용약관, 개인정보 처리방침, 마케팅 동의 문서 버전 관리 | 약관 버전 이력이 필요할 때 |
+| `public.user_terms_agreements` | 사용자별 약관 동의 이력 | 약관 동의 감사/이력 보존이 필요할 때 |
+| `public.user_login_events` | 로그인 성공/실패 이력, 보안 감사 | 보안 모니터링이 필요할 때 |
+| `public.user_devices` | 사용자 기기 관리, 기기별 로그아웃 | 멀티 디바이스 관리가 필요할 때 |
 
 ## `public.stock`
 
@@ -310,7 +439,7 @@ UNIQUE (snapshot_batch_at, theme_id, side)
 
 ## Triggers
 
-`public.stock`, `public.sector`, `public.theme`, `public.stock_daily_price`는 update 시 `updated_at`을 자동 갱신합니다.
+`public.stock`, `public.sector`, `public.theme`, `public.stock_daily_price`, `public.users`, `public.user_oauth_accounts`는 update 시 `updated_at`을 자동 갱신합니다.
 
 공용 함수:
 
@@ -324,6 +453,12 @@ public.set_updated_at()
 public.set_stock_daily_price_updated_at()
 ```
 
+인증 전용 함수:
+
+```text
+public.set_auth_updated_at()
+```
+
 트리거:
 
 ```text
@@ -331,6 +466,8 @@ set_stock_updated_at
 set_sector_updated_at
 set_theme_updated_at
 set_stock_daily_price_updated_at
+set_users_updated_at
+set_user_oauth_accounts_updated_at
 ```
 
 ## Source Data Mapping
@@ -342,6 +479,7 @@ set_stock_daily_price_updated_at
 | `data/judal_common.json` | `public.theme`, `public.stock_theme` |
 | KIS `주식현재가 시세` REST | `public.stock_intraday_snapshot` |
 | KIS `국내주식기간별시세(일/주/월/년)` REST | `public.stock_daily_price` |
+| 로그인/회원가입 API | `public.users`, `public.user_password_credentials`, `public.user_oauth_accounts`, `public.auth_refresh_tokens`, `public.phone_verification_codes` |
 | 당일 섹터/테마 계산 결과 | `public.sector_daily_leadership_snapshot`, `public.theme_daily_leadership_snapshot` |
 
 ## Notes

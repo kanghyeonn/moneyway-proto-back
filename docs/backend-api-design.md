@@ -36,6 +36,10 @@ app/api/market_snapshots.py
 app/api/market_leadership.py
   -> app/services/market_leadership_service.py
   -> app/repositories/market_leadership_repository.py
+
+app/api/auth.py
+  -> app/services/auth_service.py
+  -> app/repositories/auth_repository.py
 ```
 
 ## Endpoint
@@ -43,6 +47,14 @@ app/api/market_leadership.py
 | Method | Path | 설명 |
 | --- | --- | --- |
 | `GET` | `/health` | 헬스 체크 |
+| `POST` | `/api/auth/signup` | 이메일/휴대폰 비밀번호 회원가입 |
+| `POST` | `/api/auth/login` | 이메일 또는 휴대폰 번호 기반 로그인 |
+| `POST` | `/api/auth/oauth/google` | Google ID token 기반 회원가입/로그인 |
+| `POST` | `/api/auth/refresh` | refresh token 회전 및 access token 재발급 |
+| `POST` | `/api/auth/logout` | refresh token 폐기 |
+| `GET` | `/api/auth/me` | access token 기반 현재 사용자 조회 |
+| `POST` | `/api/auth/phone-verifications` | 휴대폰 인증번호 생성 |
+| `POST` | `/api/auth/phone-verifications/confirm` | 휴대폰 인증번호 확인 |
 | `GET` | `/api/market/discovery/status` | 발견 화면 상태/기준 시각 |
 | `GET` | `/api/market/discovery/rankings` | 발견 화면 거래대금/거래량/급상승/급하락 랭킹 |
 | `GET` | `/api/market/discovery/market-summary` | KOSPI/KOSDAQ 지수 요약 |
@@ -237,6 +249,150 @@ change_rate = change_amount / previous_close_price * 100
 ```
 
 특정일 주도 섹터/테마는 `stock_daily_price.trading_date`를 기준으로 `stock_sector`, `stock_theme`을 조인해 계산합니다.
+
+## 인증 DB 설계 기준
+
+로그인/회원가입 최소 테이블은 아래 SQL로 생성합니다.
+
+```text
+sql/20260608_auth_minimum_tables.sql
+```
+
+최소 구성:
+
+```text
+public.users
+public.user_password_credentials
+public.user_oauth_accounts
+public.auth_refresh_tokens
+public.phone_verification_codes
+```
+
+화면 기준 지원 범위:
+
+- 이메일 또는 휴대폰 번호 + 비밀번호 로그인
+- Google 회원가입/로그인
+- 자동 로그인
+- 휴대폰 인증번호
+- Apple 회원가입/로그인은 추후 `user_oauth_accounts.provider='apple'`로 확장
+
+토큰 설계:
+
+```text
+Moneyway access token
+- 짧은 만료 시간
+- API Authorization Bearer 토큰
+- 일반적으로 DB에 저장하지 않음
+
+Moneyway refresh token
+- 긴 만료 시간
+- 앱 secure storage에 원문 저장
+- DB에는 auth_refresh_tokens.token_hash만 저장
+```
+
+Google 로그인은 Google ID token을 백엔드에서 검증한 뒤, `user_oauth_accounts.provider='google'`, `provider_user_id=<Google sub>`로 사용자를 찾거나 생성합니다. 이후 앱에는 Google token이 아니라 Moneyway access token과 refresh token을 발급합니다.
+
+구현된 인증 endpoint:
+
+```text
+POST /api/auth/signup
+{
+  "email": "user@example.com",
+  "phone_number": "01012345678",
+  "password": "password123",
+  "name": "홍길동",
+  "marketing_agreed": false,
+  "phone_verification_code": "123456",
+  "device_id": "expo-device-id"
+}
+
+POST /api/auth/login
+{
+  "identifier": "user@example.com",
+  "password": "password123",
+  "device_id": "expo-device-id"
+}
+
+POST /api/auth/oauth/google
+{
+  "id_token": "<google-id-token>",
+  "device_id": "expo-device-id",
+  "marketing_agreed": false
+}
+
+POST /api/auth/refresh
+{
+  "refresh_token": "<refresh-token>",
+  "device_id": "expo-device-id"
+}
+
+POST /api/auth/logout
+{
+  "refresh_token": "<refresh-token>"
+}
+
+GET /api/auth/me
+Authorization: Bearer <access-token>
+
+POST /api/auth/phone-verifications
+{
+  "phone_number": "01012345678",
+  "purpose": "signup"
+}
+
+POST /api/auth/phone-verifications/confirm
+{
+  "phone_number": "01012345678",
+  "purpose": "signup",
+  "code": "123456"
+}
+```
+
+`signup`, `login`, `oauth/google`, `refresh`는 동일한 응답 형태를 반환합니다.
+
+```text
+{
+  "user": {
+    "id": 1,
+    "email": "user@example.com",
+    "phone_number": "01012345678",
+    "name": "홍길동",
+    "profile_image_url": null,
+    "status": "active",
+    "marketing_agreed": false,
+    "created_at": "2026-06-08T00:00:00Z"
+  },
+  "tokens": {
+    "access_token": "...",
+    "refresh_token": "...",
+    "token_type": "Bearer",
+    "expires_in": 1800
+  }
+}
+```
+
+휴대폰 인증번호는 `AUTH_EXPOSE_DEV_CODES=1`인 로컬 개발 환경에서만 응답의 `development_code`로 노출합니다. 실제 서비스에서는 SMS 발송 provider를 붙이고 이 값을 노출하지 않습니다.
+
+관련 설정:
+
+```text
+AUTH_TOKEN_SECRET
+AUTH_ACCESS_TOKEN_MINUTES
+AUTH_REFRESH_TOKEN_DAYS
+AUTH_PHONE_VERIFICATION_TTL_MINUTES
+AUTH_EXPOSE_DEV_CODES
+GOOGLE_OAUTH_CLIENT_ID
+```
+
+추가 권장 테이블:
+
+| 테이블 | 용도 |
+| --- | --- |
+| `public.password_reset_tokens` | 비밀번호 찾기/재설정 |
+| `public.terms` | 약관/개인정보/마케팅 동의 문서 버전 |
+| `public.user_terms_agreements` | 사용자별 약관 동의 이력 |
+| `public.user_login_events` | 로그인 성공/실패 감사 로그 |
+| `public.user_devices` | 기기별 세션/로그아웃 관리 |
 
 ## KIS 설정과 필수 파라미터
 

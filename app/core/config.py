@@ -25,6 +25,13 @@ def _float_env(name: str, default: float) -> float:
     return float(value)
 
 
+def _bool_env(name: str, default: bool) -> bool:
+    value = os.getenv(name)
+    if value is None or value == "":
+        return default
+    return value.lower() in {"1", "true", "yes", "on"}
+
+
 def _str_env(name: str, default: str = "") -> str:
     value = os.getenv(name)
     if value is None or value == "":
@@ -184,6 +191,17 @@ class Settings:
     market_snapshot_interval_minutes: int = _int_env(
         "MARKET_SNAPSHOT_INTERVAL_MINUTES", 30
     )
+
+    auth_token_secret: str = _str_env(
+        "AUTH_TOKEN_SECRET", "dev-insecure-change-me"
+    )
+    auth_access_token_minutes: int = _int_env("AUTH_ACCESS_TOKEN_MINUTES", 30)
+    auth_refresh_token_days: int = _int_env("AUTH_REFRESH_TOKEN_DAYS", 30)
+    auth_phone_verification_ttl_minutes: int = _int_env(
+        "AUTH_PHONE_VERIFICATION_TTL_MINUTES", 5
+    )
+    auth_expose_dev_codes: bool = _bool_env("AUTH_EXPOSE_DEV_CODES", False)
+    google_oauth_client_id: str = _str_env("GOOGLE_OAUTH_CLIENT_ID", "")
 
     def __post_init__(self) -> None:
         object.__setattr__(

@@ -7,12 +7,14 @@ import httpx
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
+from app.api.auth import router as auth_router
 from app.api.market_discovery import router as market_discovery_router
 from app.api.market_leadership import router as market_leadership_router
 from app.api.market_snapshots import router as market_snapshots_router
 from app.core.config import get_settings
 from app.db.pool import close_db_pool, init_db_pool
 from app.kis.client import KisConfigurationError
+from app.services.auth_service import AuthError
 
 
 @asynccontextmanager
@@ -48,6 +50,12 @@ async def httpx_error_handler(_request: Request, exc: httpx.HTTPError) -> JSONRe
     return JSONResponse(status_code=503, content={"detail": str(exc)})
 
 
+@app.exception_handler(AuthError)
+async def auth_error_handler(_request: Request, exc: AuthError) -> JSONResponse:
+    return JSONResponse(status_code=exc.status_code, content={"detail": str(exc)})
+
+
+app.include_router(auth_router)
 app.include_router(market_discovery_router)
 app.include_router(market_leadership_router)
 app.include_router(market_snapshots_router)
