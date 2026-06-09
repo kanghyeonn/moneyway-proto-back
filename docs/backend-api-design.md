@@ -137,30 +137,59 @@ KIS_HTS_TOP_VIEW_PATH
 KIS_HTS_TOP_VIEW_TR_ID
 ```
 
+## 사용 중인 KIS OpenAPI
+
+현재 코드에서 사용하는 한국투자증권 OpenAPI는 아래와 같습니다.
+
+| KIS API | Endpoint | TR ID | 사용 위치 | 사용하는 이유 |
+| --- | --- | --- | --- | --- |
+| OAuth 접근토큰 발급 | `POST /oauth2/tokenP` | - | `KisClient._issue_access_token()` | KIS REST API 호출에 필요한 access token 발급. 발급 제한을 줄이기 위해 `.env`에 토큰과 만료시각을 캐시 |
+| 거래량순위 | `GET /uapi/domestic-stock/v1/quotations/volume-rank` | `FHPST01710000` | `fetch_volume_top()` | 발견 화면의 거래량 상위 종목 조회 |
+| 거래대금순위 | `GET /uapi/domestic-stock/v1/quotations/volume-rank` | `FHPST01710000` | `fetch_trade_amount_top()` | 발견 화면의 거래대금 상위 종목 조회. 같은 거래량순위 API에 `FID_BLNG_CLS_CODE=3` 파라미터를 적용 |
+| 등락률 순위 | `GET /uapi/domestic-stock/v1/ranking/fluctuation` | `FHPST01700000` | `fetch_risers()` | 발견 화면의 급상승 종목 조회 |
+| 등락률 순위 | `GET /uapi/domestic-stock/v1/ranking/fluctuation` | `FHPST01700000` | `fetch_fallers()` | 발견 화면의 급하락 종목 조회. 상승 조회와 같은 API를 하락 정렬 파라미터로 호출 |
+| HTS 조회상위20종목 | `GET /uapi/domestic-stock/v1/ranking/hts-top-view` | `HHMCM000100C0` | `fetch_hts_top_view()` | 발견 화면의 인기 검색 종목 코드 목록 조회. 종목명은 DB `stock` 테이블에서 매핑 |
+| 주식현재가 시세 | `GET /uapi/domestic-stock/v1/quotations/inquire-price` | `FHKST01010100` | `fetch_current_price()` | 종목 현재가, 누적 거래량, 누적 거래대금, 등락률 조회. 인기 검색 종목 등락률 보강과 주도 섹터/테마 스냅샷 수집에 사용 |
+| 국내주식기간별시세 | `GET /uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice` | `FHKST03010100` | `fetch_daily_prices()` | 종목별 일봉 OHLC, 거래량, 거래대금, 등락률 저장. 특정일 주도 섹터/테마 계산과 과거 분석 원천 |
+| 국내업종 현재지수 | `GET /uapi/domestic-stock/v1/quotations/inquire-index-price` | `FHPUP02100000` | `fetch_index_price()` | KOSPI/KOSDAQ 지수, 상승/보합/하락 종목 수 조회 |
+
+사용 화면/작업 기준으로 보면 아래처럼 나뉩니다.
+
+| 기능 | 사용하는 KIS API |
+| --- | --- |
+| 발견 화면 랭킹 | 거래량순위, 등락률 순위 |
+| 발견 화면 시장 요약 | 국내업종 현재지수 |
+| 발견 화면 인기 검색 종목 | HTS 조회상위20종목 + 주식현재가 시세 |
+| 주도 섹터/테마 장중 스냅샷 | 주식현재가 시세 |
+| 과거 일봉 수집 | 국내주식기간별시세 |
+| 모든 KIS 호출 | OAuth 접근토큰 발급 |
+
 ## 당일 리더십 집계 기준
 
 당일 주도 섹터/테마는 `stock_intraday_snapshot`의 최신 배치 하나를 사용합니다.
 섹터/테마의 당일 누적 거래대금이 1000억 원 이상인 경우만 주도 후보로 반환합니다.
 
-종목별 계산:
+종목별 입력값:
 
 ```text
 trade_amount = current.accumulated_trade_amount
 change_rate = current.change_rate / 100
 ```
 
+KIS 등락률 `3.5`는 계산 시 `0.035`로 변환합니다. 입력 종목은 `accumulated_trade_amount > 0`이고 `change_rate IS NOT NULL`인 종목만 사용합니다.
+
 섹터/테마별 주요 지표:
 
-```text
-trade_amount
-weighted_change_rate
-advance_ratio
-up_trade_amount_ratio
-decline_ratio
-down_trade_amount_ratio
-top1_trade_amount_share
-concentration_penalty
-```
+| 지표 | 계산식 | 의미 |
+| --- | --- | --- |
+| `trade_amount` | `sum(stock.trade_amount)` | 카테고리 소속 종목들의 누적 거래대금 합계 |
+| `weighted_change_rate` | `sum(trade_amount * change_rate) / sum(trade_amount)` | 거래대금 가중 등락률 |
+| `advance_ratio` | `count(change_rate > 0) / count(*)` | 상승 종목 비율 |
+| `up_trade_amount_ratio` | `sum(상승 종목 trade_amount) / sum(trade_amount)` | 상승 종목 거래대금 비율 |
+| `decline_ratio` | `count(change_rate < 0) / count(*)` | 하락 종목 비율 |
+| `down_trade_amount_ratio` | `sum(하락 종목 trade_amount) / sum(trade_amount)` | 하락 종목 거래대금 비율 |
+| `stock_count` | `count(*)` | 카테고리에 포함된 계산 대상 종목 수 |
+| `top1_trade_amount_share` | `max(stock.trade_amount) / sum(trade_amount)` | 거래대금 1위 종목의 카테고리 내 비중 |
 
 상승 주도 점수:
 
@@ -191,6 +220,24 @@ top1_trade_amount_share <= 0.4 -> 1.0
 top1_trade_amount_share >= 0.8 -> 0.5
 0.4~0.8 구간 -> 1.0에서 0.5까지 선형 감점
 ```
+
+즉, 한 종목이 카테고리 거래대금의 80% 이상을 차지하면 주도 점수는 절반으로 줄어듭니다. 이 보정은 한 대형주만 강하게 움직인 경우를 전체 섹터/테마 주도로 과대평가하지 않기 위한 장치입니다.
+
+최종 후보 필터:
+
+```text
+stock_count >= 3
+trade_amount >= 100000000000  # 1000억 원
+bullish: weighted_change_rate > 0
+bearish: weighted_change_rate < 0
+```
+
+해석:
+
+- 거래대금만 큰 카테고리는 상승 주도 섹터/테마가 아닙니다. 평균적으로 상승해야 `bullish` 후보가 됩니다.
+- 거래대금이 크고 평균적으로 하락하면 `bearish` 후보가 될 수 있습니다.
+- `advance_ratio / 0.6`은 확산도 보정입니다. 상승 종목 비율이 60% 이상이면 상승 확산도는 만점으로 보고, 그보다 낮으면 비례 감점합니다. 하락도 `decline_ratio / 0.6`으로 동일하게 처리합니다.
+- `LN(1 + trade_amount)`를 사용해 거래대금이 클수록 유리하게 하되, 초대형 카테고리가 선형으로 과도하게 유리해지지 않도록 완화합니다.
 
 ## 과거 일봉 저장 기준
 

@@ -70,10 +70,11 @@ GET /health
 
 ## 주요 API 문서
 
+- 프로젝트 주요 로직 요약: `docs/project-overview.md`
 - 탐색/검색 화면 API: `docs/front/find/api.md`
 - 플로우 화면 API: `docs/front/flow/api.md`
 - 스냅샷 스케줄러 운영 메모: `docs/operations/market-snapshot-scheduler.md`
-- DB 및 설계 문서: `docs/schema-summary.md`, `docs/backend-api-design.md`
+- DB 및 설계 문서: `docs/db/schema-summary.md`, `docs/backend-api-design.md`
 
 ## 스냅샷 수집
 
