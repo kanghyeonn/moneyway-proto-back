@@ -84,8 +84,8 @@ app/api/auth.py
 top_n: 1-100, 기본 DEFAULT_TOP_N
 side: bullish | bearish, 기본 bullish
 sort: score_desc | trade_amount_desc | weighted_change_rate_desc | weighted_change_rate_asc
-snapshot_batch_at: 선택, 생략하면 최신 스냅샷
-date: 선택, KST 기준 조회 날짜. 해당일 스냅샷이 없고 거래일이면 에러, 주말/휴장일이면 직전 거래일 스냅샷 사용
+snapshot_batch_at: 선택, 생략하면 최신 장중 스냅샷
+date: 선택, KST 기준 조회 날짜. 해당일 장중 스냅샷이 있으면 스냅샷 사용, 없으면 stock_daily_price 일봉 데이터로 계산. 해당일 일봉도 없으면 직전 일봉 거래일 사용
 ```
 
 ## 발견 화면 API
@@ -185,7 +185,7 @@ KIS_HTS_TOP_VIEW_TR_ID
 
 ## 당일 리더십 집계 기준
 
-당일 주도 섹터/테마는 `stock_intraday_snapshot`의 최신 배치 하나를 사용합니다.
+당일 주도 섹터/테마는 `stock_intraday_snapshot`의 최신 배치 하나를 우선 사용합니다. 특정 날짜 조회에서 해당 날짜의 장중 스냅샷이 없으면 `stock_daily_price` 일봉 데이터를 같은 점수식에 넣어 계산합니다. 주말/휴장일처럼 해당일 일봉도 없으면 직전 일봉 거래일을 사용합니다.
 섹터/테마의 당일 누적 거래대금이 1000억 원 이상인 경우만 주도 후보로 반환합니다.
 
 종목별 입력값:
@@ -247,14 +247,16 @@ top1_trade_amount_share >= 0.8 -> 0.5
 ```text
 stock_count >= 3
 trade_amount >= 100000000000  # 1000억 원
-bullish: weighted_change_rate > 0
-bearish: weighted_change_rate < 0
+bullish: weighted_change_rate > 0 AND advancing_stock_count >= 3
+bearish: weighted_change_rate < 0 AND declining_stock_count >= 3
 ```
 
 해석:
 
 - 거래대금만 큰 카테고리는 상승 주도 섹터/테마가 아닙니다. 평균적으로 상승해야 `bullish` 후보가 됩니다.
 - 거래대금이 크고 평균적으로 하락하면 `bearish` 후보가 될 수 있습니다.
+- 상승 주도는 상승 종목이 최소 3개 이상이어야 합니다. 1~2개 종목만 급등해 카테고리 점수가 높아지는 경우는 제외합니다.
+- 하락 주도도 대칭적으로 하락 종목이 최소 3개 이상이어야 합니다.
 - `advance_ratio / 0.6`은 확산도 보정입니다. 상승 종목 비율이 60% 이상이면 상승 확산도는 만점으로 보고, 그보다 낮으면 비례 감점합니다. 하락도 `decline_ratio / 0.6`으로 동일하게 처리합니다.
 - `LN(1 + trade_amount)`를 사용해 거래대금이 클수록 유리하게 하되, 초대형 카테고리가 선형으로 과도하게 유리해지지 않도록 완화합니다.
 

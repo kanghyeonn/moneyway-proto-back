@@ -162,7 +162,7 @@ KIS_ACCESS_TOKEN_EXPIRES_AT_2
 
 ## 4. 주도 섹터/테마 계산
 
-주도 섹터/테마 API는 저장된 최신 현재가 스냅샷을 읽어 on-demand로 계산합니다.
+주도 섹터/테마 API는 저장된 최신 현재가 스냅샷을 우선 읽어 on-demand로 계산합니다. 특정 날짜에 장중 스냅샷이 없으면 `stock_daily_price` 일봉 데이터를 같은 계산식에 넣어 계산합니다.
 
 관련 파일:
 
@@ -176,6 +176,7 @@ app/api/market_leadership.py
 
 ```text
 public.stock_intraday_snapshot
+public.stock_daily_price
 public.stock
 public.sector
 public.stock_sector
@@ -229,11 +230,11 @@ score =
   * concentration_penalty
 ```
 
-최종 후보는 `stock_count >= 3`, `trade_amount >= 1000억 원`을 만족해야 합니다. 상승 주도는 `weighted_change_rate > 0`, 하락 주도는 `weighted_change_rate < 0`이어야 합니다.
+최종 후보는 `stock_count >= 3`, `trade_amount >= 1000억 원`을 만족해야 합니다. 상승 주도는 `weighted_change_rate > 0`이고 상승 종목 수가 최소 3개 이상이어야 합니다. 하락 주도는 `weighted_change_rate < 0`이고 하락 종목 수가 최소 3개 이상이어야 합니다. 이 필터는 1~2개 종목만 급등 또는 급락해 전체 섹터/테마가 주도 카테고리처럼 보이는 경우를 제외하기 위한 조건입니다.
 
 `concentration_penalty`는 거래대금 1위 종목 쏠림을 줄이는 값입니다. 1위 종목 비중이 40% 이하이면 `1.0`, 80% 이상이면 `0.5`, 그 사이는 선형 감점합니다.
 
-날짜를 지정했을 때 해당 날짜가 주말 또는 휴장일이면 DB 일봉 데이터 기준 직전 거래일 스냅샷을 사용합니다. 거래일인데 해당일 스냅샷이 없으면 에러를 반환합니다.
+날짜를 지정했을 때 해당 날짜의 장중 스냅샷이 있으면 장중 스냅샷을 사용합니다. 장중 스냅샷이 없으면 해당일 `stock_daily_price` 일봉 데이터를 사용합니다. 해당일 일봉도 없으면 주말/휴장일 조회처럼 직전 일봉 거래일 데이터를 사용합니다.
 
 ## 5. 과거 일봉 수집
 

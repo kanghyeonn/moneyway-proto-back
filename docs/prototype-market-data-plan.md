@@ -8,20 +8,20 @@
 
 특정일의 주도 섹터/테마를 과거 데이터로 계산하기 위해 한국투자증권 `국내주식기간별시세(일/주/월/년)` REST API의 일봉 데이터는 별도 원천 테이블에 저장합니다.
 
-## API로 바로 전달할 데이터
+## 발견 화면용 1분 스냅샷 데이터
 
-다음 데이터는 한국투자증권 OpenAPI에서 받아 백엔드가 가공한 뒤 프론트에 바로 전달합니다.
+다음 데이터는 한국투자증권 OpenAPI에서 받아 백엔드가 가공한 뒤 1분 단위 스냅샷 테이블에 저장합니다. 프론트는 KIS를 직접 호출하지 않고 저장된 최신 스냅샷을 조회합니다.
 
 - 거래량 상위 종목
 - 거래대금 상위 종목
 - 급상승 종목 상위
 - 급하락 종목 상위
 
-이 데이터는 프로토타입 단계에서 DB에 별도 저장하지 않습니다.
+수집 진입점은 `scripts/run_market_discovery_snapshot.py`입니다.
 
 ## 내부에서 계산할 데이터
 
-당일 주도 섹터/테마는 `public.stock_intraday_snapshot`의 최신 배치 하나를 사용합니다.
+당일 주도 섹터/테마는 `public.stock_intraday_snapshot`의 최신 배치 하나를 우선 사용합니다. 특정 날짜에 장중 스냅샷이 없으면 `public.stock_daily_price`의 일봉 데이터를 사용해 같은 계산식으로 산출합니다. 해당일 일봉도 없으면 직전 일봉 거래일을 사용합니다.
 
 종목별 계산:
 
@@ -78,8 +78,10 @@ concentration_penalty
    - public.stock_intraday_snapshot
 
 2. 프론트가 당일 주도 섹터/테마 API 호출
-   - 최신 snapshot_batch_at 조회
-   - 최신 배치의 stock_intraday_snapshot 조회
+   - 날짜별 최신 snapshot_batch_at 조회
+   - 해당일 장중 스냅샷이 있으면 stock_intraday_snapshot 조회
+   - 장중 스냅샷이 없으면 stock_daily_price 일봉 조회
+   - 해당일 일봉도 없으면 직전 일봉 거래일 조회
    - stock_sector, stock_theme 조인
    - 카테고리 누적 거래대금 1000억 원 이상만 후보로 사용
    - 상승/하락 주도 점수 계산
@@ -199,9 +201,11 @@ top1_trade_amount_share >= 0.8 -> concentration_penalty = 0.5
 ```text
 stock_count >= 3
 trade_amount > 0
-bullish: weighted_change_rate > 0
-bearish: weighted_change_rate < 0
+bullish: weighted_change_rate > 0 AND advancing_stock_count >= 3
+bearish: weighted_change_rate < 0 AND declining_stock_count >= 3
 ```
+
+상승 또는 하락 종목이 1~2개뿐인 카테고리는 특정 종목 급등락에 의한 착시로 보고 주도 섹터/테마 후보에서 제외합니다.
 
 ## 설계 판단
 

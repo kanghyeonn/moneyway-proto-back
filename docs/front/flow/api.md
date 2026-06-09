@@ -11,11 +11,11 @@ Base URL:
 ## 공통 규칙
 
 - 모든 시각은 ISO 8601 datetime 문자열입니다.
-- `snapshot_batch_at`을 생략하면 DB에 저장된 최신 스냅샷 배치를 기준으로 조회합니다.
-- `date`를 지정하면 KST 기준 해당 날짜의 스냅샷을 조회합니다. 해당 날짜가 주말이거나 DB 일봉 데이터 기준 휴장일이면 직전 거래일 스냅샷을 사용합니다.
+- `snapshot_batch_at`을 생략하면 DB에 저장된 최신 장중 스냅샷 배치를 기준으로 조회합니다.
+- `date`를 지정하면 KST 기준 해당 날짜를 조회합니다. 해당 날짜의 장중 스냅샷이 있으면 스냅샷을 사용하고, 없으면 일봉 데이터를 사용합니다. 해당일 일봉도 없으면 직전 일봉 거래일을 사용합니다.
 - 주도 섹터/테마는 당일 누적 거래대금이 `100000000000`원 이상인 카테고리만 반환합니다.
 - `weighted_change_rate`, `advance_ratio` 같은 비율 값은 소수입니다. 프론트에서 퍼센트로 표시할 때는 `value * 100`을 사용합니다.
-- DB 스냅샷이 없으면 `503`과 `{ "detail": "No stock_intraday_snapshot batches are available" }` 형태로 응답합니다.
+- 조회 가능한 장중 스냅샷과 일봉 데이터가 모두 없으면 `503` 형태로 응답합니다.
 
 ## 용어
 
@@ -70,9 +70,10 @@ Response:
 
 ## 2. 날짜별 최신 스냅샷
 
-특정 날짜의 최신 스냅샷 배치 하나를 반환합니다. 날짜는 한국 주식 화면 기준이므로 KST 날짜로 해석합니다.
-요청한 날짜에 스냅샷이 없고 해당 날짜가 거래일이면 `503` 에러를 반환합니다.
-요청한 날짜가 주말이거나 DB 일봉 데이터 기준 휴장일이면 직전 거래일 스냅샷을 반환합니다.
+특정 날짜의 최신 조회 기준 하나를 반환합니다. 날짜는 한국 주식 화면 기준이므로 KST 날짜로 해석합니다.
+요청한 날짜에 장중 스냅샷이 있으면 해당 스냅샷을 반환합니다.
+요청한 날짜에 장중 스냅샷이 없으면 `stock_daily_price` 일봉 데이터를 조회 기준으로 사용하고 `status="daily_price"`를 반환합니다.
+요청한 날짜가 주말이거나 DB 일봉 데이터 기준 휴장일이면 직전 일봉 거래일을 반환합니다.
 DB에 스냅샷이 아예 없으면 `snapshot_batch_at=null`, `stock_count=0`, `status="empty"`를 반환합니다.
 
 ```http
@@ -95,9 +96,9 @@ Response:
 
 ```json
 {
-  "snapshot_batch_at": "2026-06-05T06:00:00.000000Z",
-  "stock_count": 2877,
-  "status": "completed"
+  "snapshot_batch_at": "2026-06-05T00:00:00+09:00",
+  "stock_count": 2876,
+  "status": "daily_price"
 }
 ```
 
@@ -135,7 +136,7 @@ Response:
 }
 ```
 
-`is_delayed`는 최신 스냅샷의 KST 날짜가 오늘보다 이전이면 `true`입니다. 주말이나 장 시작 전에는 직전 거래일 스냅샷을 표시할 수 있습니다.
+`is_delayed`는 최신 스냅샷의 KST 날짜가 오늘보다 이전이면 `true`입니다. 주말이나 장 시작 전에는 최신 장중 스냅샷 기준일을 표시할 수 있습니다.
 스냅샷이 전혀 없으면 `display_time="데이터 없음"`, `latest_snapshot_batch_at=null`, `latest_snapshot_date=null`, `stock_count=0`, `status="empty"`를 반환합니다.
 
 ## 4. 섹터 요약
@@ -152,6 +153,8 @@ Query:
 | --- | --- | --- | --- | --- |
 | `snapshot_batch_at` | datetime | no | 최신 스냅샷 | 조회 기준 스냅샷 |
 | `date` | string | no | 최신 스냅샷 | KST 기준 조회 날짜. `snapshot_batch_at`이 있으면 무시됨 |
+
+`date`로 조회할 때 해당 날짜의 장중 스냅샷이 없으면 같은 응답 구조로 일봉 데이터 기반 결과를 반환합니다. 이 경우 `snapshot_batch_at`은 해당 거래일 00:00 KST를 나타내는 기준값입니다. 이 값을 이후 요청의 `snapshot_batch_at`으로 다시 전달해도 같은 일봉 기준으로 조회됩니다.
 
 Example:
 
@@ -239,6 +242,8 @@ Query:
 | `snapshot_batch_at` | datetime | no | 최신 스냅샷 | 조회 기준 스냅샷 |
 | `date` | string | no | 최신 스냅샷 | KST 기준 조회 날짜. `snapshot_batch_at`이 있으면 무시됨 |
 | `include_top_stocks` | number | no | `0` | 각 섹터에 포함할 TOP 종목 수. `0-10` |
+
+`date`로 조회할 때 해당 날짜의 장중 스냅샷이 없으면 같은 응답 구조로 일봉 데이터 기반 결과를 반환합니다. 이 경우 `snapshot_batch_at`은 해당 거래일 00:00 KST를 나타내는 기준값입니다. 이 값을 이후 요청의 `snapshot_batch_at`으로 다시 전달해도 같은 일봉 기준으로 조회됩니다.
 
 `sort` 값:
 
@@ -335,6 +340,8 @@ Query:
 | `sort` | string | no | `change_rate_desc` | `change_rate_desc` 또는 `change_rate_asc` |
 | `snapshot_batch_at` | datetime | no | 최신 스냅샷 | 조회 기준 스냅샷 |
 | `date` | string | no | 최신 스냅샷 | KST 기준 조회 날짜. `snapshot_batch_at`이 있으면 무시됨 |
+
+`date`로 조회할 때 해당 날짜의 장중 스냅샷이 없으면 같은 응답 구조로 일봉 데이터 기반 종목 목록을 반환합니다.
 
 Example:
 
