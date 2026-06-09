@@ -20,7 +20,7 @@ FastAPI에는 수동 트리거 API도 유지되어 있습니다.
 POST /api/market/intraday-snapshots/run
 ```
 
-이 API는 KIS `주식현재가 시세` REST API를 사용해 활성 종목의 현재가, 누적 거래량, 누적 거래대금, 전일 대비 등락률을 수집하고 `public.stock_intraday_snapshot`에 저장합니다.
+이 API는 KIS `주식현재가 시세` REST API를 사용해 활성 일반 주식의 현재가, 누적 거래량, 누적 거래대금, 전일 대비 등락률을 수집하고 `public.stock_intraday_snapshot`에 저장합니다. 주도 섹터/테마 계산용 스냅샷에서는 `stock_type`이 `ETF`, `ETN`인 종목은 제외합니다.
 
 `scripts/run_market_snapshot.py`로 실행하는 장중 현재가 스냅샷 worker는 별도 KIS credential/token 세트를 사용합니다.
 

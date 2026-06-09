@@ -12,18 +12,25 @@ class MarketRepository:
         self._pool = pool
 
     async def active_snapshot_targets(
-        self, *, limit: int | None = None
+        self,
+        *,
+        limit: int | None = None,
+        exclude_stock_types: list[str] | None = None,
     ) -> list[dict[str, object]]:
         query = """
             SELECT id, short_code
             FROM public.stock
             WHERE is_active = true
+                AND (
+                    $1::text[] IS NULL
+                    OR stock_type <> ALL($1::text[])
+                )
             ORDER BY short_code
         """
-        args: tuple[int, ...] = ()
+        args: list[object] = [exclude_stock_types]
         if limit is not None:
-            query += " LIMIT $1"
-            args = (limit,)
+            query += " LIMIT $2"
+            args.append(limit)
 
         rows = await self._pool.fetch(query, *args)
         return [{"stock_id": row["id"], "short_code": row["short_code"]} for row in rows]

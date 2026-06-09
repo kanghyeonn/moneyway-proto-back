@@ -38,7 +38,10 @@ class MarketService:
         if batch_at.tzinfo is None:
             batch_at = batch_at.replace(tzinfo=timezone.utc)
 
-        targets = await repository.active_snapshot_targets(limit=limit)
+        targets = await repository.active_snapshot_targets(
+            limit=limit,
+            exclude_stock_types=["ETF", "ETN"],
+        )
         quotes: list[StockIntradayQuote] = []
         errors: list[str] = []
 

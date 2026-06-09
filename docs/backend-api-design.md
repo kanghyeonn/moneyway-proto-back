@@ -537,7 +537,7 @@ POST /api/market/intraday-snapshots/run
 query:
 
 ```text
-limit: 선택, 수집할 활성 종목 수 제한
+limit: 선택, 수집할 활성 일반 주식 수 제한
 dry_run: 선택, true면 KIS 호출만 하고 DB에 저장하지 않음
 snapshot_batch_at: 선택, 생략하면 현재 시각을 설정된 스냅샷 간격 단위로 내림
 ```
@@ -548,7 +548,7 @@ snapshot_batch_at: 선택, 생략하면 현재 시각을 설정된 스냅샷 간
 curl -X POST "http://localhost:8000/api/market/intraday-snapshots/run?limit=5&dry_run=true"
 ```
 
-전체 수집은 `public.stock`의 활성 종목 전체를 대상으로 하며, `KIS_REQUEST_INTERVAL_SECONDS=0.4` 기준 약 2.5건/초로 호출합니다.
+전체 수집은 `public.stock`의 활성 일반 주식을 대상으로 하며, `stock_type`이 `ETF`, `ETN`인 종목은 제외합니다. `KIS_REQUEST_INTERVAL_SECONDS=0.4` 기준 약 2.5건/초로 호출합니다.
 
 ## OAuth 토큰 캐시
 
