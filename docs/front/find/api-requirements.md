@@ -270,18 +270,18 @@ Base URL:
 
 | API | 구현 상태 | 비고 |
 | --- | --- | --- |
-| `GET /status` | 구현됨 | KST 현재 시각 기준 `실시간 업데이트`, `당일 기준` 반환 |
-| `GET /rankings?type=trading_value&limit=30` | 구현됨 | KIS 거래대금 상위 API 사용 |
-| `GET /rankings?type=trading_volume&limit=30` | 구현됨 | KIS 거래량 상위 API 사용 |
-| `GET /rankings?type=top_gainers&limit=30` | 구현됨 | KIS 급상승 API 사용 |
-| `GET /rankings?type=top_losers&limit=30` | 구현됨 | KIS 급하락 API 사용 |
-| `GET /market-summary` | 구현됨 | KIS 국내 업종 현재 지수 API로 KOSPI/KOSDAQ 조회 |
-| `GET /advance-decline` | 구현됨 | KOSPI/KOSDAQ 지수 응답의 상승/보합/하락 종목 수 합산 |
-| `GET /popular-searches?limit=3` | 구현됨 | KIS HTS 조회상위20종목 + DB 종목명 매핑 + 현재가 API 등락률 보강 |
-| `GET /overview` | 구현됨 | status, ranking, market-summary, advance-decline, popular-searches 통합 응답 |
+| `GET /status` | 구현됨 | 최신 discovery DB 스냅샷 기준 시각과 지연 여부 반환 |
+| `GET /rankings?type=trading_value&limit=30` | 구현됨 | 수집 worker가 저장한 거래대금 상위 스냅샷 조회 |
+| `GET /rankings?type=trading_volume&limit=30` | 구현됨 | 수집 worker가 저장한 거래량 상위 스냅샷 조회 |
+| `GET /rankings?type=top_gainers&limit=30` | 구현됨 | 수집 worker가 저장한 급상승 스냅샷 조회 |
+| `GET /rankings?type=top_losers&limit=30` | 구현됨 | 수집 worker가 저장한 급하락 스냅샷 조회 |
+| `GET /market-summary` | 구현됨 | 수집 worker가 저장한 KOSPI/KOSDAQ 지수 스냅샷 조회 |
+| `GET /advance-decline` | 구현됨 | 최신 스냅샷과 직전 스냅샷의 상승/하락 종목 수 및 delta 계산 |
+| `GET /popular-searches?limit=3` | 구현됨 | 수집 worker가 저장한 인기검색 종목 스냅샷 조회 |
+| `GET /overview` | 구현됨 | status, ranking, market-summary, advance-decline, popular-searches를 DB 스냅샷 기반으로 통합 응답 |
 
 현재 제한사항:
 
 - `rankings`의 `market` 쿼리는 현재 `all`만 지원한다. `kospi`, `kosdaq`은 KIS 랭킹 파라미터 확정 후 별도 보강이 필요하다.
-- `advance-decline`의 `up_delta`, `down_delta`는 이전 시점 대비 비교 데이터가 없어 현재 `0`으로 내려간다.
-- `popular-searches`는 `hts-top-view`가 종목코드만 제공하므로 종목명은 DB `stock` 테이블에서 매핑하고, 등락률은 각 종목별 현재가 API로 보강한다.
+- `advance-decline`의 `up_delta`, `down_delta`는 정확히 1분 전 timestamp가 아니라 직전 성공 스냅샷 대비 변화량이다.
+- 프론트 API는 KIS를 직접 호출하지 않는다. KIS 호출은 `scripts/run_market_discovery_snapshot.py` 수집 worker 실행 시점에 발생한다.

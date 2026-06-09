@@ -10,6 +10,9 @@
 app/workers/market_snapshot_worker.py
 scripts/run_market_snapshot.py
 
+app/workers/market_discovery_snapshot_worker.py
+scripts/run_market_discovery_snapshot.py
+
 app/workers/stock_daily_price_worker.py
 scripts/run_stock_daily_prices.py
 ```
@@ -195,6 +198,8 @@ cd /Users/kanghyeon/workspace/moneyway_back
 ```text
 app/workers/market_snapshot_worker.py
 scripts/run_market_snapshot.py
+app/workers/market_discovery_snapshot_worker.py
+scripts/run_market_discovery_snapshot.py
 app/workers/stock_daily_price_worker.py
 scripts/run_stock_daily_prices.py
 ```
@@ -212,6 +217,17 @@ scripts/run_stock_daily_prices.py
   - 진행상황 출력
   - 결과 JSON 출력
   - 실패 시 non-zero exit code 반환
+- `app/workers/market_discovery_snapshot_worker.py`
+  - discovery 화면용 1분 스냅샷 수집 worker
+  - DB pool 초기화
+  - DB advisory lock 기반 중복 실행 방지
+  - `KisClient`, `MarketRepository`, `MarketDiscoveryRepository`, `MarketDiscoverySnapshotService` 생성
+  - 거래대금/거래량/급상승/급하락, KOSPI/KOSDAQ 지수, 인기검색 종목 수집
+- `scripts/run_market_discovery_snapshot.py`
+  - `python scripts/run_market_discovery_snapshot.py`로 실행
+  - CLI argument parsing
+  - 진행상황 출력
+  - 수집 기준 시각 출력
 - `app/workers/stock_daily_price_worker.py`
   - 설정 로드
   - DB pool 초기화
@@ -258,6 +274,17 @@ KIS_ACCESS_TOKEN_2=...
 KIS_ACCESS_TOKEN_EXPIRES_AT_2=...
 DATABASE_URL=postgresql://...
 ```
+
+discovery 화면 1분 스냅샷 수동 실행 예:
+
+```bash
+.venv/bin/python scripts/run_market_discovery_snapshot.py \
+  --ranking-limit 30 \
+  --popular-limit 20 \
+  --request-interval-seconds 1
+```
+
+이 worker가 저장한 `market_discovery_*` 테이블을 `/api/market/discovery/*` API가 조회합니다.
 
 `KIS_REQUEST_INTERVAL_SECONDS`는 KIS 유량 제한을 피하기 위한 종목별 요청 간격입니다.
 

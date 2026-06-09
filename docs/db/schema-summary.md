@@ -19,6 +19,10 @@ public.theme
 public.stock_theme
 public.market_snapshot_batch
 public.stock_intraday_snapshot
+public.market_discovery_snapshot_batch
+public.market_discovery_ranking_snapshot
+public.market_discovery_index_snapshot
+public.market_discovery_popular_search_snapshot
 public.stock_daily_price
 public.users
 public.user_password_credentials
@@ -37,6 +41,11 @@ public.theme_daily_leadership_stock
 public.stock
   1 ── N public.stock_intraday_snapshot
   1 ── N public.stock_daily_price
+
+public.market_discovery_snapshot_batch
+  1 ── N public.market_discovery_ranking_snapshot
+  1 ── N public.market_discovery_index_snapshot
+  1 ── N public.market_discovery_popular_search_snapshot
 
 public.users
   1 ── 1 public.user_password_credentials
@@ -334,6 +343,102 @@ stock_intraday_snapshot_amount_idx
 stock_intraday_snapshot_observed_idx
 ```
 
+## `public.market_discovery_snapshot_batch`
+
+발견 화면용 1분 스냅샷 수집 배치 상태를 기록합니다.
+
+적용 SQL:
+
+```text
+sql/20260609_market_discovery_snapshots.sql
+```
+
+| 컬럼 | 타입 | 제약/설명 |
+| --- | --- | --- |
+| `snapshot_batch_at` | `TIMESTAMPTZ` | PK, 스냅샷 기준 시각 |
+| `status` | `VARCHAR(16)` | NOT NULL, `running`, `completed`, `partial`, `failed` |
+| `started_at` | `TIMESTAMPTZ` | NOT NULL, default `now()` |
+| `finished_at` | `TIMESTAMPTZ` | 완료 시각 |
+| `ranking_success_count` | `INTEGER` | 성공한 랭킹 수집 개수 |
+| `ranking_failed_count` | `INTEGER` | 실패한 랭킹 수집 개수 |
+| `index_success_count` | `INTEGER` | 성공한 지수 수집 개수 |
+| `index_failed_count` | `INTEGER` | 실패한 지수 수집 개수 |
+| `popular_success_count` | `INTEGER` | 인기검색 수집 성공 여부/개수 |
+| `popular_failed_count` | `INTEGER` | 인기검색 수집 실패 여부/개수 |
+| `error_message` | `TEXT` | 실패/부분 실패 사유 |
+| `created_at` | `TIMESTAMPTZ` | NOT NULL, default `now()` |
+
+## `public.market_discovery_ranking_snapshot`
+
+발견 화면의 거래대금/거래량/급상승/급하락 랭킹 스냅샷입니다.
+
+| 컬럼 | 타입 | 제약/설명 |
+| --- | --- | --- |
+| `snapshot_batch_at` | `TIMESTAMPTZ` | FK -> `market_discovery_snapshot_batch(snapshot_batch_at)` |
+| `ranking_type` | `VARCHAR(32)` | `trading_value`, `trading_volume`, `top_gainers`, `top_losers` |
+| `rank` | `INTEGER` | 1부터 시작하는 순위 |
+| `short_code` | `VARCHAR(7)` | 종목코드 |
+| `name` | `VARCHAR(120)` | 종목명 |
+| `price` | `NUMERIC(24, 4)` | 현재가 |
+| `trade_amount` | `NUMERIC(24, 2)` | 누적 거래대금 |
+| `volume` | `BIGINT` | 누적 거래량 |
+| `change_rate` | `NUMERIC(12, 6)` | 전일 대비 등락률 |
+| `direction` | `VARCHAR(8)` | `up`, `down`, `flat` |
+| `raw` | `JSONB` | 원천/보조 데이터 |
+| `created_at` | `TIMESTAMPTZ` | NOT NULL, default `now()` |
+
+기본 키:
+
+```text
+(snapshot_batch_at, ranking_type, rank)
+```
+
+## `public.market_discovery_index_snapshot`
+
+발견 화면의 KOSPI/KOSDAQ 지수 및 상승/하락/보합 종목 수 스냅샷입니다.
+
+| 컬럼 | 타입 | 제약/설명 |
+| --- | --- | --- |
+| `snapshot_batch_at` | `TIMESTAMPTZ` | FK -> `market_discovery_snapshot_batch(snapshot_batch_at)` |
+| `code` | `VARCHAR(32)` | `KOSPI`, `KOSDAQ` |
+| `label` | `VARCHAR(80)` | 화면 표시명 |
+| `value` | `NUMERIC(24, 6)` | 지수 현재값 |
+| `change` | `NUMERIC(24, 6)` | 전일 대비 변동값 |
+| `change_rate` | `NUMERIC(12, 6)` | 전일 대비 등락률 |
+| `direction` | `VARCHAR(8)` | `up`, `down`, `flat` |
+| `up_count` | `INTEGER` | 상승 종목 수 |
+| `down_count` | `INTEGER` | 하락 종목 수 |
+| `unchanged_count` | `INTEGER` | 보합 종목 수 |
+| `raw` | `JSONB` | 원천/보조 데이터 |
+| `created_at` | `TIMESTAMPTZ` | NOT NULL, default `now()` |
+
+기본 키:
+
+```text
+(snapshot_batch_at, code)
+```
+
+## `public.market_discovery_popular_search_snapshot`
+
+발견 화면의 인기검색 종목 스냅샷입니다.
+
+| 컬럼 | 타입 | 제약/설명 |
+| --- | --- | --- |
+| `snapshot_batch_at` | `TIMESTAMPTZ` | FK -> `market_discovery_snapshot_batch(snapshot_batch_at)` |
+| `rank` | `INTEGER` | 1부터 시작하는 순위 |
+| `short_code` | `VARCHAR(7)` | 종목코드 |
+| `name` | `VARCHAR(120)` | 종목명 |
+| `change_rate` | `NUMERIC(12, 6)` | 전일 대비 등락률 |
+| `direction` | `VARCHAR(8)` | `up`, `down`, `flat` |
+| `raw` | `JSONB` | 원천/보조 데이터 |
+| `created_at` | `TIMESTAMPTZ` | NOT NULL, default `now()` |
+
+기본 키:
+
+```text
+(snapshot_batch_at, rank)
+```
+
 ## `public.stock_daily_price`
 
 종목별 과거 일봉 원천 데이터입니다. 한국투자증권 `국내주식기간별시세(일/주/월/년)` API의 일봉 데이터를 저장해 특정일의 주도 섹터/테마를 계산할 때 사용합니다.
@@ -479,6 +584,7 @@ set_user_oauth_accounts_updated_at
 | `data/toss_sector.json` | `public.sector`, `public.stock_sector` |
 | `data/judal_common.json` | `public.theme`, `public.stock_theme` |
 | KIS `주식현재가 시세` REST | `public.stock_intraday_snapshot` |
+| KIS 순위/지수/조회상위 REST | `public.market_discovery_ranking_snapshot`, `public.market_discovery_index_snapshot`, `public.market_discovery_popular_search_snapshot` |
 | KIS `국내주식기간별시세(일/주/월/년)` REST | `public.stock_daily_price` |
 | 로그인/회원가입 API | `public.users`, `public.user_password_credentials`, `public.user_oauth_accounts`, `public.auth_refresh_tokens`, `public.phone_verification_codes` |
 | 당일 섹터/테마 계산 결과 | `public.sector_daily_leadership_snapshot`, `public.theme_daily_leadership_snapshot` |
@@ -493,6 +599,8 @@ set_user_oauth_accounts_updated_at
 - ETF/ETN은 `public.stock.stock_type`을 각각 `ETF`, `ETN`으로 저장합니다.
 - 당일 주도 섹터/테마는 최신 `stock_intraday_snapshot`의 `accumulated_trade_amount`와 `change_rate`를 함께 사용합니다.
 - 최신 스냅샷 하나만 있으면 당일 주도 섹터/테마를 계산할 수 있습니다.
+- 발견 화면 API는 최신 `market_discovery_*` 스냅샷을 조회하며, KIS 직접 호출은 수집 worker에서만 수행합니다.
+- 발견 화면 상승/하락 종목 수 delta는 최신 성공 스냅샷과 직전 성공 스냅샷의 차이입니다.
 - 특정일 주도 섹터/테마는 `stock_daily_price`의 `trading_date` 기준 일봉 데이터를 `stock_sector`, `stock_theme`과 조인해 계산할 수 있습니다.
 
 ## Currently Unused Tables

@@ -14,7 +14,8 @@ Base URL:
 - `display_time`은 KST 기준 `HH:MM` 문자열입니다.
 - `change_rate`는 `%` 문자를 제외한 숫자입니다. 예: `3.82`
 - `direction`은 `up`, `down`, `flat` 중 하나입니다.
-- KIS 설정 또는 호출 오류가 발생하면 `503`과 `{ "detail": "..." }` 형태로 응답합니다.
+- discovery API는 KIS를 직접 호출하지 않고, 1분 단위 수집 worker가 저장한 DB 스냅샷을 조회합니다.
+- DB 스냅샷이 없거나 조회할 수 없으면 `503`과 `{ "detail": "..." }` 형태로 응답합니다.
 - 현재 `market` 필터는 `all`만 지원합니다. `kospi`, `kosdaq` 요청은 `503`으로 응답합니다.
 
 ## 1. 발견 화면 상태
@@ -44,8 +45,8 @@ Response:
 | `status_label` | string | 업데이트 상태 라벨 |
 | `basis_label` | string | 데이터 기준 라벨 |
 | `display_time` | string | 화면 표시용 기준 시각 |
-| `latest_snapshot_at` | datetime | 상태 생성 시각 |
-| `is_delayed` | boolean | 지연 여부. 현재는 실시간 호출 기준이라 `false` |
+| `latest_snapshot_at` | datetime | 최신 discovery 스냅샷 기준 시각 |
+| `is_delayed` | boolean | 최신 스냅샷이 일정 시간 이상 갱신되지 않았는지 여부 |
 
 ## 2. 발견 랭킹
 
@@ -63,9 +64,9 @@ Query:
 | `limit` | number | no | `30` | 반환 종목 수. `1-100` |
 | `market` | string | no | `all` | 현재는 `all`만 지원 |
 
-`type`별 원천:
+`type`별 수집 원천:
 
-| `type` | 의미 | KIS 호출 |
+| `type` | 의미 | 수집 worker의 KIS 원천 |
 | --- | --- | --- |
 | `trading_value` | 거래대금 상위 | 거래량순위 API + 거래금액순 파라미터 |
 | `trading_volume` | 거래량 상위 | 거래량순위 API |
@@ -145,7 +146,7 @@ Response:
 }
 ```
 
-원천은 KIS `국내업종 현재지수` API입니다.
+원천은 수집 worker가 저장한 `market_discovery_index_snapshot`입니다. worker는 KIS `국내업종 현재지수` API로 KOSPI/KOSDAQ 지수를 수집합니다.
 
 ## 4. 상승/하락 종목 수
 
@@ -173,15 +174,15 @@ Response:
 | 이름 | 타입 | 설명 |
 | --- | --- | --- |
 | `up_count` | number | KOSPI + KOSDAQ 상승 종목 수 |
-| `up_delta` | number | 이전 기준 대비 상승 종목 수 변화. 현재는 비교 데이터가 없어 `0` |
+| `up_delta` | number | 최신 성공 스냅샷과 직전 성공 스냅샷의 상승 종목 수 차이 |
 | `down_count` | number | KOSPI + KOSDAQ 하락 종목 수 |
-| `down_delta` | number | 이전 기준 대비 하락 종목 수 변화. 현재는 비교 데이터가 없어 `0` |
+| `down_delta` | number | 최신 성공 스냅샷과 직전 성공 스냅샷의 하락 종목 수 차이 |
 | `unchanged_count` | number | KOSPI + KOSDAQ 보합 종목 수 |
 | `basis_time` | datetime | 응답 기준 시각 |
 
 ## 5. 인기 검색 종목
 
-KIS HTS 조회상위 종목을 현재가 API로 보강해 반환합니다.
+수집 worker가 저장한 인기검색 종목 스냅샷을 반환합니다.
 
 ```http
 GET /api/market/discovery/popular-searches
@@ -215,7 +216,7 @@ Response:
 }
 ```
 
-구현 방식:
+수집 방식:
 
 ```text
 KIS HTS조회상위20종목
@@ -227,8 +228,9 @@ KIS HTS조회상위20종목
 
 주의:
 
-- 인기 검색 종목은 종목별 현재가 API를 추가 호출하므로 `limit`이 클수록 KIS 호출 수가 증가합니다.
-- DB `stock` 테이블에서 종목명을 찾지 못하면 종목코드를 `name`으로 반환합니다.
+- API 조회 시점에는 KIS를 호출하지 않습니다.
+- 수집 worker는 인기 검색 종목별 현재가 API를 추가 호출하므로 `popular_limit`이 클수록 KIS 호출 수가 증가합니다.
+- 수집 시 DB `stock` 테이블에서 종목명을 찾지 못하면 종목코드를 `name`으로 저장합니다.
 
 ## 6. 발견 화면 통합 조회
 
@@ -305,6 +307,6 @@ GET /api/market/discovery/rankings?type=top_losers&limit=30
 ## 현재 제한사항
 
 - `market=kospi`, `market=kosdaq`은 아직 지원하지 않습니다.
-- `up_delta`, `down_delta`는 이전 기준 시각 데이터가 없어 현재 `0`입니다.
-- `status`는 실제 지연 판단이 아니라 KST 현재 시각 기준 상태입니다.
-- `popular-searches`는 `limit`만큼 현재가 API를 추가 호출합니다.
+- `up_delta`, `down_delta`는 정확히 1분 전 timestamp가 아니라 직전 성공 스냅샷 대비 변화량입니다.
+- `status`는 최신 스냅샷 기준 시각과 지연 여부를 반환합니다.
+- API 응답은 DB snapshot 기반입니다. KIS 호출은 수집 worker 실행 시점에만 발생합니다.
