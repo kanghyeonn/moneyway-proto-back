@@ -35,6 +35,7 @@ logs/*
 
 # Test/report artifacts
 docs/kis/*API*.xlsx
+docs/koscom
 docs/meeting/
 sql/
 test/

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
@@ -19,6 +20,9 @@ from app.schemas.market import (
 
 
 logger = logging.getLogger(__name__)
+
+KIS_API_RETRY_LIMIT = 3
+KIS_API_RETRY_DELAY_SECONDS = 1.0
 
 
 class KisConfigurationError(RuntimeError):
@@ -219,15 +223,62 @@ class KisClient:
     async def _get(
         self, path: str, *, tr_id: str, params: dict[str, Any] | None = None
     ) -> dict[str, Any]:
-        return await self._get_with_token_retry(path, tr_id=tr_id, params=params, retried=False)
+        last_error: Exception | None = None
 
-    async def _get_with_token_retry(
+        for attempt in range(KIS_API_RETRY_LIMIT + 1):
+            try:
+                return await self._get_once(path, tr_id=tr_id, params=params)
+            except Exception as exc:
+                last_error = exc
+                logger.warning(
+                    "KIS API request failed. path=%s tr_id=%s attempt=%s/%s "
+                    "reason=%s token_key=%s expires_at_key=%s",
+                    path,
+                    tr_id,
+                    attempt + 1,
+                    KIS_API_RETRY_LIMIT + 1,
+                    exc,
+                    self._settings.kis_access_token_cache_key,
+                    self._settings.kis_access_token_expires_at_cache_key,
+                )
+                if attempt >= KIS_API_RETRY_LIMIT:
+                    break
+                if not self._cached_access_token_is_valid():
+                    break
+
+                logger.warning(
+                    "Retrying KIS API request with valid cached token. "
+                    "path=%s tr_id=%s retry=%s/%s delay_seconds=%s reason=%s",
+                    path,
+                    tr_id,
+                    attempt + 1,
+                    KIS_API_RETRY_LIMIT,
+                    KIS_API_RETRY_DELAY_SECONDS,
+                    exc,
+                )
+                await asyncio.sleep(KIS_API_RETRY_DELAY_SECONDS)
+
+        reason = str(last_error) if last_error else "retry limit exceeded"
+        logger.error(
+            "KIS API request retries exhausted; refreshing access token. "
+            "path=%s tr_id=%s retry_limit=%s reason=%s token_key=%s "
+            "expires_at_key=%s",
+            path,
+            tr_id,
+            KIS_API_RETRY_LIMIT,
+            reason,
+            self._settings.kis_access_token_cache_key,
+            self._settings.kis_access_token_expires_at_cache_key,
+        )
+        await self._refresh_access_token_for_retry(path=path, tr_id=tr_id, reason=reason)
+        return await self._get_once(path, tr_id=tr_id, params=params)
+
+    async def _get_once(
         self,
         path: str,
         *,
         tr_id: str,
         params: dict[str, Any] | None,
-        retried: bool,
     ) -> dict[str, Any]:
         token = await self._get_access_token()
         headers = {
@@ -244,15 +295,6 @@ class KisClient:
             transport=self._transport,
         ) as client:
             response = await client.get(path, headers=headers, params=params or {})
-            if response.status_code in (401, 403, 500) and not retried:
-                await self._refresh_access_token_for_retry(
-                    path=path,
-                    tr_id=tr_id,
-                    reason=f"HTTP {response.status_code}",
-                )
-                return await self._get_with_token_retry(
-                    path, tr_id=tr_id, params=params, retried=True
-                )
             try:
                 response.raise_for_status()
             except httpx.HTTPStatusError as exc:
@@ -260,17 +302,7 @@ class KisClient:
             data = response.json()
 
         if data.get("rt_cd") not in (None, "0"):
-            if _is_token_error(data) and not retried:
-                await self._refresh_access_token_for_retry(
-                    path=path,
-                    tr_id=tr_id,
-                    reason=str(data.get("msg1") or data.get("msg_cd") or "token error"),
-                )
-                return await self._get_with_token_retry(
-                    path, tr_id=tr_id, params=params, retried=True
-                )
-            message = data.get("msg1") or data.get("msg_cd") or "KIS API returned an error"
-            raise RuntimeError(message)
+            raise RuntimeError(_kis_api_error_message(data))
         return data
 
     async def _refresh_access_token_for_retry(
@@ -353,6 +385,12 @@ class KisClient:
             return None, None
         return token, expires_at
 
+    def _cached_access_token_is_valid(self) -> bool:
+        token, expires_at = self._load_cached_access_token()
+        if not token or expires_at is None:
+            return False
+        return datetime.now(timezone.utc) < expires_at
+
     def _save_cached_access_token(self, token: str, expires_at: datetime) -> None:
         env_path = self._settings.kis_token_cache_env_file
         if not env_path:
@@ -414,25 +452,21 @@ def _parse_datetime(value: str) -> datetime | None:
     return parsed.astimezone(timezone.utc)
 
 
-def _is_token_error(data: dict[str, Any]) -> bool:
-    msg_cd = str(data.get("msg_cd") or "")
-    msg = str(data.get("msg1") or "").lower()
-    return (
-        msg_cd in {"EGW00121", "EGW00123", "EGW00133"}
-        or "token" in msg
-        or "토큰" in msg
-        or "authorization" in msg
-    )
-
-
 def _http_error_message(response: httpx.Response) -> str:
     body_message = _response_body_message(response)
     if body_message:
-        return body_message
+        return f"KIS HTTP {response.status_code} error: {body_message}"
     return (
         f"KIS API HTTP {response.status_code} error for "
         f"{response.request.method} {response.request.url.path}"
     )
+
+
+def _kis_api_error_message(data: dict[str, Any]) -> str:
+    body_message = _response_data_message(data)
+    if body_message:
+        return f"KIS API error: {body_message}"
+    return "KIS API returned an error"
 
 
 def _response_body_message(response: httpx.Response) -> str | None:
@@ -443,15 +477,20 @@ def _response_body_message(response: httpx.Response) -> str | None:
         return text[:500] if text else None
 
     if isinstance(data, dict):
-        parts = [
-            str(data[key])
-            for key in ("msg1", "msg_cd", "rt_cd")
-            if data.get(key) not in (None, "")
-        ]
-        if parts:
-            return " / ".join(parts)
+        return _response_data_message(data)
     text = response.text.strip()
     return text[:500] if text else None
+
+
+def _response_data_message(data: dict[str, Any]) -> str | None:
+    parts = [
+        str(data[key])
+        for key in ("msg1", "msg_cd", "rt_cd")
+        if data.get(key) not in (None, "")
+    ]
+    if parts:
+        return " / ".join(parts)
+    return None
 
 
 def _validate_fluctuation_params(params: dict[str, str], label: str) -> None:
